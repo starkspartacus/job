@@ -1,0 +1,88 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  email           String           @unique
+  hashedPassword  String
+  phone           String?          @unique
+  role            String // "candidate" or "employer"
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  emailVerified   DateTime?
+
+  candidateProfile CandidateProfile?
+  employerProfile  EmployerProfile?
+}
+
+model CandidateProfile {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String    @unique @db.ObjectId
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName          String
+  lastName           String
+  dateOfBirth        String?
+  gender             String?
+  experienceLevel    String?
+  educationLevel     String?
+  skills             String[]  @default([])
+  languages          String[]  @default([])
+  availability       String?
+  salaryExpectation  String?
+  workAuthorization  Boolean?
+  rating             Float     @default(0)
+  reviews            Int       @default(0)
+  avatar             String? // Photo de profil du candidat
+  lastActive         String?
+  verified           Boolean   @default(false)
+  responseTime       String?
+  responseRate       Int?
+  country            String?
+  city               String?
+  commune            String?
+}
+
+model EmployerProfile {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String    @unique @db.ObjectId
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName        String
+  companyType        String?
+  companySize        String?
+  foundingYear       String?
+  companyDescription String?
+  contactPerson      String?
+  website            String?
+  socialMedia        String?
+  companyAddress     String?
+  country            String?
+  city               String?
+  commune            String?
+  avatar             String? // Logo de l'entreprise
+  jobs               Job[]
+}
+
+model Job {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  employerId   String    @db.ObjectId
+  employer     EmployerProfile @relation(fields: [employerId], references: [id])
+  company      String // Duplicated from employer for easier querying (can be denormalized)
+  location     String
+  country      String
+  city         String
+  commune      String
+  type         String
+  salary       String
+  posted       DateTime  @default(now())
+  description  String
+  requirements String[]  @default([])
+  category     String
+  featured     Boolean   @default(false)
+}
