@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { AFRICAN_COUNTRIES, getCitiesByCountry, getCommunesByCity } from "@/lib/countries-data"
@@ -21,49 +21,79 @@ interface LocationSelectorProps {
 }
 
 export function LocationSelector({ onLocationChange, defaultValues, className = "" }: LocationSelectorProps) {
-  const [selectedCountry, setSelectedCountry] = useState<string>(defaultValues?.country || "")
-  const [selectedCity, setSelectedCity] = useState<string>(defaultValues?.city || "")
-  const [selectedCommune, setSelectedCommune] = useState<string>(defaultValues?.commune || "")
+  // États
+  const [internalValues, setInternalValues] = useState({
+    country: defaultValues?.country || "",
+    city: defaultValues?.city || "",
+    commune: defaultValues?.commune || ""
+  })
 
   const [availableCities, setAvailableCities] = useState<Array<{ name: string; communes: string[] }>>([])
   const [availableCommunes, setAvailableCommunes] = useState<string[]>([])
 
+  // Chargement initial
   useEffect(() => {
-    if (selectedCountry) {
-      const cities = getCitiesByCountry(selectedCountry)
+    if (internalValues.country) {
+      const cities = getCitiesByCountry(internalValues.country)
       setAvailableCities(cities)
-      setSelectedCity("")
-      setSelectedCommune("")
+      
+      if (internalValues.city) {
+        const communes = getCommunesByCity(internalValues.country, internalValues.city)
+        setAvailableCommunes(communes)
+      }
+    }
+  }, []) // Seulement au montage
+
+  // Mise à jour des villes
+  useEffect(() => {
+    if (internalValues.country) {
+      const cities = getCitiesByCountry(internalValues.country)
+      setAvailableCities(cities)
       setAvailableCommunes([])
+      setInternalValues(prev => ({ ...prev, city: "", commune: "" }))
     }
-  }, [selectedCountry])
+  }, [internalValues.country])
 
+  // Mise à jour des communes
   useEffect(() => {
-    if (selectedCountry && selectedCity) {
-      const communes = getCommunesByCity(selectedCountry, selectedCity)
+    if (internalValues.country && internalValues.city) {
+      const communes = getCommunesByCity(internalValues.country, internalValues.city)
       setAvailableCommunes(communes)
-      setSelectedCommune("")
+      setInternalValues(prev => ({ ...prev, commune: "" }))
     }
-  }, [selectedCountry, selectedCity])
+  }, [internalValues.country, internalValues.city])
 
-  useEffect(() => {
-    const country = AFRICAN_COUNTRIES.find((c) => c.code === selectedCountry)
-    if (country) {
-      onLocationChange({
-        country: selectedCountry,
-        city: selectedCity,
-        commune: selectedCommune,
-        dialCode: country.dialCode,
-      })
-    }
-  }, [selectedCountry, selectedCity, selectedCommune, onLocationChange])
+  // Gestion des changements
+  const handleChange = useCallback((type: 'country' | 'city' | 'commune', value: string) => {
+    setInternalValues(prev => {
+      const newValues = { ...prev, [type]: value }
+      
+      // Notifier le parent seulement quand tous les champs sont remplis
+      if (newValues.country && newValues.city && newValues.commune) {
+        const country = AFRICAN_COUNTRIES.find(c => c.code === newValues.country)
+        if (country) {
+          onLocationChange({
+            country: newValues.country,
+            city: newValues.city,
+            commune: newValues.commune,
+            dialCode: country.dialCode
+          })
+        }
+      }
+      
+      return newValues
+    })
+  }, [onLocationChange])
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* Country Selection */}
+      {/* Pays */}
       <div className="space-y-2">
         <Label htmlFor="country">Pays *</Label>
-        <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+        <Select 
+          value={internalValues.country} 
+          onValueChange={(value) => handleChange('country', value)}
+        >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Sélectionnez votre pays" />
           </SelectTrigger>
@@ -81,12 +111,16 @@ export function LocationSelector({ onLocationChange, defaultValues, className = 
         </Select>
       </div>
 
-      {/* City Selection */}
+      {/* Ville */}
       <div className="space-y-2">
         <Label htmlFor="city">Ville *</Label>
-        <Select value={selectedCity} onValueChange={setSelectedCity} disabled={!selectedCountry}>
+        <Select 
+          value={internalValues.city} 
+          onValueChange={(value) => handleChange('city', value)} 
+          disabled={!internalValues.country}
+        >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder={selectedCountry ? "Sélectionnez votre ville" : "Sélectionnez d'abord un pays"} />
+            <SelectValue placeholder={internalValues.country ? "Sélectionnez votre ville" : "Sélectionnez d'abord un pays"} />
           </SelectTrigger>
           <SelectContent>
             {availableCities.map((city) => (
@@ -98,12 +132,20 @@ export function LocationSelector({ onLocationChange, defaultValues, className = 
         </Select>
       </div>
 
-      {/* Commune Selection */}
+      {/* Commune */}
       <div className="space-y-2">
         <Label htmlFor="commune">Commune/Quartier *</Label>
-        <Select value={selectedCommune} onValueChange={setSelectedCommune} disabled={!selectedCity}>
+        <Select 
+          value={internalValues.commune} 
+          onValueChange={(value) => handleChange('commune', value)} 
+          disabled={!internalValues.city || availableCommunes.length === 0}
+        >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder={selectedCity ? "Sélectionnez votre commune" : "Sélectionnez d'abord une ville"} />
+            <SelectValue placeholder={
+              !internalValues.city ? "Sélectionnez d'abord une ville" :
+              availableCommunes.length === 0 ? "Aucune commune disponible" :
+              "Sélectionnez votre commune"
+            } />
           </SelectTrigger>
           <SelectContent>
             {availableCommunes.map((commune) => (

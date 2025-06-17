@@ -55,7 +55,7 @@ model EmployerProfile {
   companyName        String
   companyType        String?
   companySize        String?
-  foundingYear       String?
+  foundingYear       Int?
   companyDescription String?
   contactPerson      String?
   website            String?
@@ -64,7 +64,8 @@ model EmployerProfile {
   country            String?
   city               String?
   commune            String?
-  avatar             String? // Logo de l'entreprise
+  avatar             String? // Photo de profil du candidat (si l'employeur a un avatar personnel)
+  companyLogo        String? // NEW FIELD: Logo de l'entreprise
   jobs               Job[]
 }
 

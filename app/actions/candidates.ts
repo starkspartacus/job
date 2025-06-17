@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from "@/lib/prisma"
+import prisma from "@/lib/prisma"
 import type { Candidate } from "@/lib/api"
 
 export async function getAllCandidates(): Promise<Candidate[]> {
@@ -15,7 +15,7 @@ export async function getAllCandidates(): Promise<Candidate[]> {
     }
   })
 
-  return candidates.map((candidate) => ({
+  return candidates.map((candidate: Candidate) => ({
     ...candidate,
     id: candidate.id.toString(),
     userId: candidate.userId.toString(),
