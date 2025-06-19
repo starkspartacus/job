@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -31,181 +31,52 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { ContactModal } from "@/components/ui/contact-modal"
+import { useParams } from "next/navigation"
 
 export default function CandidateProfilePage() {
   const [isContacting, setIsContacting] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
+  const [candidateData, setCandidateData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // Données d'exemple pour le profil candidat
-  const candidateData = {
-    id: 1,
-    name: "Aminata Diallo",
-    title: "Serveuse expérimentée",
-    avatar: "/placeholder.svg?height=120&width=120",
-    location: "Dakar, Sénégal",
-    age: 26,
-    phone: "+221 77 123 45 67",
-    email: "aminata.diallo@email.com",
-    joinDate: "Membre depuis Mars 2023",
-    lastActive: "En ligne",
-    verified: true,
-    rating: 4.8,
-    reviews: 12,
-    profileViews: 234,
-    responseRate: 95,
-    responseTime: "2h",
-    availability: "Disponible immédiatement",
-    salaryExpectation: "150,000 - 180,000 FCFA",
-    bio: "Serveuse passionnée avec plus de 3 ans d'expérience dans la restauration haut de gamme. Je maîtrise parfaitement le service à table, la prise de commandes et la relation client. Mon objectif est de contribuer au succès d'un établissement en offrant un service exceptionnel.",
-    languages: [
-      { name: "Français", level: 100 },
-      { name: "Wolof", level: 100 },
-      { name: "Anglais", level: 75 },
-      { name: "Arabe", level: 50 },
-    ],
-    skills: [
-      { name: "Service client", level: 95, verified: true },
-      { name: "Prise de commandes", level: 90, verified: true },
-      { name: "Encaissement", level: 85, verified: false },
-      { name: "Travail en équipe", level: 98, verified: true },
-      { name: "Gestion du stress", level: 88, verified: false },
-      { name: "Connaissance des vins", level: 70, verified: false },
-    ],
-    experiences: [
-      {
-        id: 1,
-        title: "Serveuse Senior",
-        company: "Restaurant Teranga",
-        location: "Dakar, Sénégal",
-        period: "Janvier 2022 - Présent",
-        duration: "2 ans",
-        description:
-          "Responsable du service en salle pour un restaurant de 80 couverts. Gestion d'une équipe de 3 serveuses junior, formation des nouveaux employés et supervision de la qualité du service.",
-        achievements: [
-          "Augmentation de 25% de la satisfaction client",
-          "Formation de 8 nouveaux employés",
-          "Mise en place d'un système de commandes optimisé",
-        ],
-        current: true,
-      },
-      {
-        id: 2,
-        title: "Serveuse",
-        company: "Café de la Paix",
-        location: "Dakar, Sénégal",
-        period: "Mars 2020 - Décembre 2021",
-        duration: "1 an 9 mois",
-        description:
-          "Service en salle dans un café-restaurant de 40 places. Prise de commandes, service des plats et boissons, encaissement.",
-        achievements: [
-          "Élue employée du mois 3 fois",
-          "Gestion autonome de 15 tables",
-          "Spécialisation dans les cocktails",
-        ],
-        current: false,
-      },
-      {
-        id: 3,
-        title: "Assistante de service",
-        company: "Hôtel Laico",
-        location: "Dakar, Sénégal",
-        period: "Juin 2019 - Février 2020",
-        duration: "8 mois",
-        description: "Première expérience dans l'hôtellerie. Assistance au service petit-déjeuner et room service.",
-        achievements: ["Apprentissage rapide des standards hôteliers", "Excellentes évaluations clients"],
-        current: false,
-      },
-    ],
-    education: [
-      {
-        id: 1,
-        degree: "Baccalauréat Littéraire",
-        school: "Lycée Blaise Diagne",
-        location: "Dakar, Sénégal",
-        year: "2019",
-        mention: "Assez Bien",
-      },
-      {
-        id: 2,
-        degree: "Formation Service en Restauration",
-        school: "Centre de Formation Hôtelière",
-        location: "Dakar, Sénégal",
-        year: "2020",
-        mention: "Excellent",
-      },
-    ],
-    certifications: [
-      {
-        name: "Hygiène et Sécurité Alimentaire",
-        issuer: "HACCP Sénégal",
-        date: "2023",
-        verified: true,
-      },
-      {
-        name: "Service Excellence",
-        issuer: "Institut du Tourisme",
-        date: "2022",
-        verified: true,
-      },
-      {
-        name: "Premiers Secours",
-        issuer: "Croix Rouge",
-        date: "2021",
-        verified: false,
-      },
-    ],
-    portfolio: [
-      {
-        type: "video",
-        title: "Présentation personnelle",
-        thumbnail: "/placeholder.svg?height=200&width=300",
-        duration: "2:30",
-      },
-      {
-        type: "image",
-        title: "En service au Restaurant Teranga",
-        url: "/placeholder.svg?height=200&width=300",
-      },
-      {
-        type: "document",
-        title: "Lettre de recommandation",
-        size: "245 KB",
-      },
-    ],
-    reviews: [
-      {
-        id: 1,
-        author: "Marie Dupont",
-        company: "Restaurant Teranga",
-        role: "Manager",
-        rating: 5,
-        date: "Il y a 1 mois",
-        comment:
-          "Aminata est une employée exceptionnelle. Son professionnalisme et sa gentillesse font d'elle un atout précieux pour notre équipe.",
-        verified: true,
-      },
-      {
-        id: 2,
-        author: "Jean Sow",
-        company: "Café de la Paix",
-        role: "Propriétaire",
-        rating: 5,
-        date: "Il y a 3 mois",
-        comment: "Excellente serveuse, toujours souriante et efficace. Je la recommande vivement.",
-        verified: true,
-      },
-      {
-        id: 3,
-        author: "Client anonyme",
-        company: "Restaurant Teranga",
-        role: "Client",
-        rating: 4,
-        date: "Il y a 2 semaines",
-        comment: "Service impeccable, très professionnelle et attentionnée.",
-        verified: false,
-      },
-    ],
+  const params = useParams<{ id: string }>()
+  const id = params?.id
+
+  useEffect(() => {
+    if (!id) return
+    setLoading(true)
+    setError(null)
+    fetch(`/api/candidats/${id}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Candidat introuvable")
+        return res.json()
+      })
+      .then((data) => {
+        setCandidateData(data)
+        setLoading(false)
+      })
+      .catch((err) => {
+        setError(err.message)
+        setLoading(false)
+      })
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="text-lg text-gray-500">Chargement du profil...</span>
+      </div>
+    )
+  }
+
+  if (error || !candidateData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="text-lg text-red-500">{error || "Erreur de chargement du profil."}</span>
+      </div>
+    )
   }
 
   const handleContact = () => {
@@ -256,7 +127,7 @@ export default function CandidateProfilePage() {
                       <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-3xl">
                         {candidateData.name
                           .split(" ")
-                          .map((n) => n[0])
+                          .map((n: any) => n[0])
                           .join("")}
                       </AvatarFallback>
                     </Avatar>
@@ -379,7 +250,7 @@ export default function CandidateProfilePage() {
                         Langues parlées
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {candidateData.languages.map((language, index) => (
+                        {candidateData.languages.map((language: any, index: any) => (
                           <div key={index} className="space-y-2">
                             <div className="flex justify-between">
                               <span className="font-medium text-gray-900">{language.name}</span>
@@ -400,7 +271,7 @@ export default function CandidateProfilePage() {
                         Formation
                       </h3>
                       <div className="space-y-4">
-                        {candidateData.education.map((edu, index) => (
+                        {candidateData.education.map((edu: any, index: any) => (
                           <div
                             key={edu.id}
                             className="border-l-2 border-green-200 pl-4 hover:border-green-400 transition-colors"
@@ -432,7 +303,7 @@ export default function CandidateProfilePage() {
                         Certifications
                       </h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {candidateData.certifications.map((cert, index) => (
+                        {candidateData.certifications.map((cert: any, index: any) => (
                           <div key={index} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
                             <div className="flex items-start justify-between">
                               <div>
@@ -449,7 +320,7 @@ export default function CandidateProfilePage() {
                   </TabsContent>
 
                   <TabsContent value="experience" className="space-y-6">
-                    {candidateData.experiences.map((exp, index) => (
+                    {candidateData.experiences.map((exp: any, index: any) => (
                       <div
                         key={exp.id}
                         className="border-l-4 border-blue-200 pl-6 hover:border-blue-400 transition-colors"
@@ -480,7 +351,7 @@ export default function CandidateProfilePage() {
                           <div>
                             <h4 className="font-medium text-gray-900 mb-2">Réalisations :</h4>
                             <ul className="space-y-1">
-                              {exp.achievements.map((achievement, idx) => (
+                              {exp.achievements.map((achievement: any, idx: any) => (
                                 <li key={idx} className="flex items-start space-x-2 text-sm text-gray-700">
                                   <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                                   <span>{achievement}</span>
@@ -495,7 +366,7 @@ export default function CandidateProfilePage() {
 
                   <TabsContent value="skills" className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {candidateData.skills.map((skill, index) => (
+                      {candidateData.skills.map((skill: any, index: any) => (
                         <div key={index} className="space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
@@ -512,7 +383,7 @@ export default function CandidateProfilePage() {
 
                   <TabsContent value="portfolio" className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {candidateData.portfolio.map((item, index) => (
+                      {candidateData.portfolio.map((item: any, index: any) => (
                         <Card
                           key={index}
                           className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer group"
@@ -554,7 +425,7 @@ export default function CandidateProfilePage() {
                   </TabsContent>
 
                   <TabsContent value="reviews" className="space-y-6">
-                    {candidateData.reviews.map((review) => (
+                    {candidateData.reviews.map((review: any) => (
                       <Card key={review.id} className="hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-6">
                           <div className="flex items-start space-x-4">
@@ -562,7 +433,7 @@ export default function CandidateProfilePage() {
                               <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
                                 {review.author
                                   .split(" ")
-                                  .map((n) => n[0])
+                                  .map((n: any) => n[0])
                                   .join("")}
                               </AvatarFallback>
                             </Avatar>
@@ -635,14 +506,28 @@ export default function CandidateProfilePage() {
                     <div className="space-y-3">
                       <ContactModal
                         candidate={{
-                          id: candidateData.id,
-                          name: candidateData.name,
-                          title: candidateData.title,
+                          id: String(candidateData.id),
+                          userId: candidateData.userId,
+                          email: candidateData.email,
+                          phone: candidateData.phone,
                           avatar: candidateData.avatar,
-                          location: candidateData.location,
-                          rating: candidateData.rating,
+                          salaryExpectation: candidateData.salaryExpectation,
+                          availability: candidateData.availability,
+                          dateOfBirth: candidateData.dateOfBirth,
+                          gender: candidateData.gender,
+                          country: candidateData.country,
+                          city: candidateData.city,
+                          commune: candidateData.commune,
                           reviews: candidateData.reviews,
+                          firstName: candidateData.firstName,
+                          lastName: candidateData.lastName,
+                          experienceLevel: candidateData.experienceLevel,
+                          educationLevel: candidateData.educationLevel,
                           verified: candidateData.verified,
+                          rating: candidateData.rating,
+                          languages: candidateData.languages,
+                          workAuthorization: candidateData.workAuthorization,
+                          lastActive: candidateData.lastActive,
                           responseTime: candidateData.responseTime,
                           responseRate: candidateData.responseRate,
                         }}
@@ -733,7 +618,7 @@ export default function CandidateProfilePage() {
                       <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white text-sm">
                         {candidate.name
                           .split(" ")
-                          .map((n) => n[0])
+                          .map((n: any) => n[0])
                           .join("")}
                       </AvatarFallback>
                     </Avatar>

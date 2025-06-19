@@ -19,6 +19,7 @@ model User {
 
   candidateProfile CandidateProfile?
   employerProfile  EmployerProfile?
+  sessions         Session[]
 }
 
 model CandidateProfile {
@@ -31,7 +32,6 @@ model CandidateProfile {
   gender             String?
   experienceLevel    String?
   educationLevel     String?
-  skills             String[]  @default([])
   languages          String[]  @default([])
   availability       String?
   salaryExpectation  String?
@@ -46,6 +46,9 @@ model CandidateProfile {
   country            String?
   city               String?
   commune            String?
+  experiences        Experience[]
+  skills             Skill[]
+  applications       Application[]
 }
 
 model EmployerProfile {
@@ -86,4 +89,44 @@ model Job {
   requirements String[]  @default([])
   category     String
   featured     Boolean   @default(false)
+  applications       Application[]
+}
+
+model Session {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionToken String @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Experience {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  candidateId   String   @db.ObjectId
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id])
+  title         String
+  company       String
+  periodStart   String // ex: "2022"
+  periodEnd     String // ex: "2024" ou "en cours"
+  description   String
+}
+
+model Skill {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  candidateId   String   @db.ObjectId
+  candidate     CandidateProfile @relation(fields: [candidateId], references: [id])
+  name          String
+  level         Int // 0-100
+}
+
+model Application {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  candidateId  String   @db.ObjectId
+  candidate    CandidateProfile @relation(fields: [candidateId], references: [id])
+  jobId        String   @db.ObjectId
+  job          Job      @relation(fields: [jobId], references: [id])
+  status       String   // "pending", "reviewed", "rejected", etc.
+  appliedDate  DateTime @default(now())
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useTransition, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,73 +23,177 @@ import {
   Download,
 } from "lucide-react"
 import Link from "next/link"
+import { signOut, useSession } from "next-auth/react"
+import { ExperienceList } from "@/components/espace-candidat/ExperienceList"
+import { SkillList } from "@/components/espace-candidat/SkillList"
+import { addExperience, updateExperience, addSkill, updateSkill, getCandidateById } from "@/app/actions/candidates"
+import { toast } from "sonner"
+import type { CandidateProfile } from "@/app/actions/candidates"
+import { useRouter } from "next/navigation"
 
 export default function EspaceCandidatPage() {
   const [activeTab, setActiveTab] = useState("dashboard")
+  const [isPending, startTransition] = useTransition()
+  const [candidateData, setCandidateData] = useState<CandidateProfile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
+  
+  const { data: session, status } = useSession({
+    required: true,
+    onUnauthenticated() {
+      router.replace("/connexion")
+    }
+  })
 
-  // Données d'exemple
-  const candidateData = {
-    name: "Aminata Diallo",
-    title: "Serveuse expérimentée",
-    location: "Dakar, Sénégal",
-    phone: "+221 77 123 45 67",
-    email: "aminata.diallo@email.com",
-    profileCompletion: 85,
-    rating: 4.8,
-    reviewsCount: 12,
+  const refreshData = async () => {
+    if (!session?.user?.candidateProfile?.id) return
+    
+    try {
+      const data = await getCandidateById(session.user.candidateProfile.id)
+      setCandidateData(data)
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+      toast.error("Erreur lors du rafraîchissement des données")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const applications = [
-    {
-      id: 1,
-      jobTitle: "Serveuse expérimentée",
-      company: "Restaurant Le Palmier",
-      appliedDate: "2024-01-15",
-      status: "pending",
-      location: "Dakar, Sénégal",
-    },
-    {
-      id: 2,
-      jobTitle: "Caissière",
-      company: "Fast Food Express",
-      appliedDate: "2024-01-12",
-      status: "reviewed",
-      location: "Dakar, Sénégal",
-    },
-    {
-      id: 3,
-      jobTitle: "Serveuse week-end",
-      company: "Café Central",
-      appliedDate: "2024-01-10",
-      status: "rejected",
-      location: "Dakar, Sénégal",
-    },
-  ]
+  useEffect(() => {
+    if (status === "loading") return
+    
+    if (status === "authenticated") {
+      if (session?.user?.role !== "CANDIDATE") {
+        router.replace("/")
+        return
+      }
+      refreshData()
+    }
+  }, [status, session, router])
 
-  const experiences = [
-    {
-      id: 1,
-      title: "Serveuse",
-      company: "Restaurant Teranga",
-      period: "2022 - 2024",
-      description: "Service en salle, prise de commandes, conseil clientèle",
-    },
-    {
-      id: 2,
-      title: "Caissière",
-      company: "Supermarché Auchan",
-      period: "2020 - 2022",
-      description: "Encaissement, service client, gestion de caisse",
-    },
-  ]
+  const handleSignOut = async () => {
+    try {
+      await signOut({ 
+        redirect: true, 
+        callbackUrl: "/connexion" 
+      })
+    } catch (error) {
+      console.error("Erreur lors de la déconnexion:", error)
+      toast.error("Erreur lors de la déconnexion")
+    }
+  }
 
-  const skills = [
-    { name: "Service client", level: 90 },
-    { name: "Prise de commandes", level: 85 },
-    { name: "Travail en équipe", level: 95 },
-    { name: "Gestion du stress", level: 80 },
-    { name: "Langues (Français, Wolof)", level: 100 },
-  ]
+  // Afficher un état de chargement pendant la vérification de la session
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold mb-2">Chargement...</h2>
+          <p className="text-gray-600">Veuillez patienter pendant le chargement de vos données.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!candidateData) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-red-600 mb-2">Erreur</h2>
+          <p className="text-gray-600">Impossible de charger les données du profil.</p>
+          <Button 
+            onClick={refreshData} 
+            className="mt-4"
+            variant="outline"
+          >
+            Réessayer
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const handleSaveExperience = async (data: any, id?: string) => {
+    const candidateId = session?.user?.candidateProfile?.id
+    if (!candidateId) {
+      toast.error("Profil candidat non trouvé")
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        if (id) {
+          await updateExperience(id, data)
+        } else {
+          await addExperience(candidateId, data)
+        }
+        toast.success(id ? "Expérience modifiée" : "Expérience ajoutée")
+        await refreshData()
+      } catch (error) {
+        toast.error("Une erreur est survenue")
+      }
+    })
+  }
+
+  const handleSaveSkill = async (data: any, id?: string) => {
+    const candidateId = session?.user?.candidateProfile?.id
+    if (!candidateId) {
+      toast.error("Profil candidat non trouvé")
+      return
+    }
+
+    startTransition(async () => {
+      try {
+        if (id) {
+          await updateSkill(id, data)
+        } else {
+          await addSkill(candidateId, data)
+        }
+        toast.success(id ? "Compétence modifiée" : "Compétence ajoutée")
+        await refreshData()
+      } catch (error) {
+        toast.error("Une erreur est survenue")
+      }
+    })
+  }
+
+  const calculateProfileCompletion = () => {
+    let score = 0
+    let total = 0
+
+    // Photo de profil
+    if (candidateData.avatar) { score++; }
+    total++
+
+    // Informations de base
+    if (candidateData.firstName && candidateData.lastName) { score++; }
+    total++
+
+    // Contact
+    if (candidateData.email && candidateData.phone) { score++; }
+    total++
+
+    // Localisation
+    if (candidateData.country && candidateData.city) { score++; }
+    total++
+
+    // Expériences
+    if (candidateData.experiences.length > 0) { score++; }
+    total++
+
+    // Compétences
+    if (candidateData.skills.length > 0) { score++; }
+    total++
+
+    // Langues
+    if (candidateData.languages.length > 0) { score++; }
+    total++
+
+    return Math.round((score / total) * 100)
+  }
+
+  const profileCompletion = calculateProfileCompletion()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -109,11 +213,11 @@ export default function EspaceCandidatPage() {
               </Button>
               <div className="flex items-center space-x-2">
                 <Avatar>
-                  <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                  <AvatarFallback>AD</AvatarFallback>
+                  <AvatarImage src={candidateData.avatar || "/placeholder.svg?height=32&width=32"} />
+                  <AvatarFallback>{`${candidateData.firstName[0]}${candidateData.lastName[0]}`}</AvatarFallback>
                 </Avatar>
                 <div className="hidden md:block">
-                  <p className="text-sm font-medium">{candidateData.name}</p>
+                  <p className="text-sm font-medium">{`${candidateData.firstName} ${candidateData.lastName}`}</p>
                   <p className="text-xs text-gray-500">Candidat</p>
                 </div>
               </div>
@@ -162,7 +266,7 @@ export default function EspaceCandidatPage() {
                     Paramètres
                   </Button>
                   <hr className="my-4" />
-                  <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700">
+                  <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700" onClick={handleSignOut}>
                     <LogOut className="w-4 h-4 mr-2" />
                     Déconnexion
                   </Button>
@@ -180,17 +284,19 @@ export default function EspaceCandidatPage() {
                   <CardContent className="p-6">
                     <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
                       <Avatar className="w-24 h-24">
-                        <AvatarImage src="/placeholder.svg?height=96&width=96" />
-                        <AvatarFallback className="text-2xl">AD</AvatarFallback>
+                        <AvatarImage src={candidateData.avatar || "/placeholder.svg?height=96&width=96"} />
+                        <AvatarFallback className="text-2xl">{`${candidateData.firstName[0]}${candidateData.lastName[0]}`}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-gray-900">{candidateData.name}</h2>
-                        <p className="text-lg text-gray-600 mb-2">{candidateData.title}</p>
+                        <h2 className="text-2xl font-bold text-gray-900">{`${candidateData.firstName} ${candidateData.lastName}`}</h2>
+                        <p className="text-lg text-gray-600 mb-2">{candidateData.experienceLevel || "Niveau d'expérience non renseigné"}</p>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-4">
-                          <div className="flex items-center">
-                            <MapPin className="w-4 h-4 mr-1" />
-                            {candidateData.location}
-                          </div>
+                          {candidateData.city && candidateData.country && (
+                            <div className="flex items-center">
+                              <MapPin className="w-4 h-4 mr-1" />
+                              {`${candidateData.city}, ${candidateData.country}`}
+                            </div>
+                          )}
                           <div className="flex items-center">
                             <Phone className="w-4 h-4 mr-1" />
                             {candidateData.phone}
@@ -203,10 +309,12 @@ export default function EspaceCandidatPage() {
                         <div className="flex items-center space-x-4">
                           <div className="flex items-center">
                             <Star className="w-4 h-4 text-yellow-500 mr-1" />
-                            <span className="font-medium">{candidateData.rating}</span>
-                            <span className="text-gray-500 ml-1">({candidateData.reviewsCount} avis)</span>
+                            <span className="font-medium">{candidateData.rating.toFixed(1)}</span>
+                            <span className="text-gray-500 ml-1">({candidateData.reviews} avis)</span>
                           </div>
-                          <Badge variant="secondary">Profil vérifié</Badge>
+                          {candidateData.verified && (
+                            <Badge variant="secondary">Profil vérifié</Badge>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-col space-y-2">
@@ -233,25 +341,25 @@ export default function EspaceCandidatPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Progression</span>
-                        <span className="text-sm text-gray-600">{candidateData.profileCompletion}%</span>
+                        <span className="text-sm text-gray-600">{profileCompletion}%</span>
                       </div>
-                      <Progress value={candidateData.profileCompletion} className="h-2" />
+                      <Progress value={profileCompletion} className="h-2" />
                       <div className="space-y-2 text-sm">
-                        <div className="flex items-center text-green-600">
-                          <div className="w-2 h-2 bg-green-600 rounded-full mr-2" />
-                          Photo de profil ajoutée
+                        <div className={`flex items-center ${candidateData.avatar ? "text-green-600" : "text-gray-400"}`}>
+                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.avatar ? "bg-green-600" : "bg-gray-400"}`} />
+                          Photo de profil {candidateData.avatar ? "ajoutée" : "manquante"}
                         </div>
-                        <div className="flex items-center text-green-600">
-                          <div className="w-2 h-2 bg-green-600 rounded-full mr-2" />
-                          Expériences professionnelles renseignées
+                        <div className={`flex items-center ${candidateData.experiences.length > 0 ? "text-green-600" : "text-gray-400"}`}>
+                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.experiences.length > 0 ? "bg-green-600" : "bg-gray-400"}`} />
+                          Expériences professionnelles {candidateData.experiences.length > 0 ? "renseignées" : "manquantes"}
                         </div>
-                        <div className="flex items-center text-green-600">
-                          <div className="w-2 h-2 bg-green-600 rounded-full mr-2" />
-                          Compétences ajoutées
+                        <div className={`flex items-center ${candidateData.skills.length > 0 ? "text-green-600" : "text-gray-400"}`}>
+                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.skills.length > 0 ? "bg-green-600" : "bg-gray-400"}`} />
+                          Compétences {candidateData.skills.length > 0 ? "ajoutées" : "manquantes"}
                         </div>
-                        <div className="flex items-center text-orange-600">
-                          <div className="w-2 h-2 bg-orange-600 rounded-full mr-2" />
-                          Ajouter une vidéo de présentation (+15%)
+                        <div className={`flex items-center ${candidateData.languages.length > 0 ? "text-green-600" : "text-gray-400"}`}>
+                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.languages.length > 0 ? "bg-green-600" : "bg-gray-400"}`} />
+                          Langues {candidateData.languages.length > 0 ? "renseignées" : "manquantes"}
                         </div>
                       </div>
                     </div>
@@ -260,57 +368,23 @@ export default function EspaceCandidatPage() {
 
                 {/* Experience */}
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Expériences professionnelles</CardTitle>
-                      <Button size="sm" variant="outline">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Ajouter
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {experiences.map((exp) => (
-                        <div key={exp.id} className="border-l-2 border-orange-200 pl-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-gray-900">{exp.title}</h4>
-                            <Button size="sm" variant="ghost">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <p className="text-orange-600 font-medium">{exp.company}</p>
-                          <p className="text-sm text-gray-600 mb-2">{exp.period}</p>
-                          <p className="text-sm text-gray-700">{exp.description}</p>
-                        </div>
-                      ))}
-                    </div>
+                  <CardContent className="p-6">
+                    <ExperienceList
+                      experiences={candidateData.experiences}
+                      onSave={handleSaveExperience}
+                      refresh={refreshData}
+                    />
                   </CardContent>
                 </Card>
 
                 {/* Skills */}
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Compétences</CardTitle>
-                      <Button size="sm" variant="outline">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Ajouter
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {skills.map((skill, index) => (
-                        <div key={index}>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900">{skill.name}</span>
-                            <span className="text-sm text-gray-600">{skill.level}%</span>
-                          </div>
-                          <Progress value={skill.level} className="h-2" />
-                        </div>
-                      ))}
-                    </div>
+                  <CardContent className="p-6">
+                    <SkillList
+                      skills={candidateData.skills}
+                      onSave={handleSaveSkill}
+                      refresh={refreshData}
+                    />
                   </CardContent>
                 </Card>
               </div>
@@ -346,52 +420,6 @@ export default function EspaceCandidatPage() {
                       <div className="text-sm text-gray-600">Entretiens programmés</div>
                     </CardContent>
                   </Card>
-                </div>
-
-                <div className="space-y-4">
-                  {applications.map((application) => (
-                    <Card key={application.id}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">{application.jobTitle}</h3>
-                            <p className="text-orange-600 font-medium mb-2">{application.company}</p>
-                            <div className="flex items-center space-x-4 text-sm text-gray-600">
-                              <div className="flex items-center">
-                                <MapPin className="w-4 h-4 mr-1" />
-                                {application.location}
-                              </div>
-                              <div className="flex items-center">
-                                <Calendar className="w-4 h-4 mr-1" />
-                                Candidature du {application.appliedDate}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <Badge
-                              variant={
-                                application.status === "pending"
-                                  ? "secondary"
-                                  : application.status === "reviewed"
-                                    ? "default"
-                                    : "destructive"
-                              }
-                            >
-                              {application.status === "pending"
-                                ? "En attente"
-                                : application.status === "reviewed"
-                                  ? "Consulté"
-                                  : "Refusé"}
-                            </Badge>
-                            <Button size="sm" variant="outline">
-                              <Eye className="w-4 h-4 mr-1" />
-                              Voir l'offre
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
                 </div>
               </div>
             )}

@@ -72,7 +72,7 @@ export async function POST(request: Request) {
           userId: newUser.id,
           firstName: firstName || "",
           lastName: lastName || "",
-          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+          dateOfBirth: dateOfBirth ? new Date(dateOfBirth).toISOString() : null,
           gender: gender || "",
           experienceLevel: experienceLevel || "",
           educationLevel: educationLevel || "",
