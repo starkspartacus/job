@@ -3,13 +3,13 @@ import { compare } from "bcryptjs"
 import NextAuth, { type NextAuthOptions, type User as NextAuthUser } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import prisma from "@/lib/prisma"
-// Importer les types directement de Prisma Client
 import type { CandidateProfile, EmployerProfile, Role } from "@prisma/client"
+// Pas besoin d'importer getToken ici pour le callback redirect,
+// la logique sera gérée côté client ou par le middleware.
 
 // Déclarer les modules pour étendre les types de NextAuth
 declare module "next-auth" {
   interface User {
-    // Ajouter les champs personnalisés à l'interface User de NextAuth
     role?: Role
     phone?: string | null
     candidateProfile?: CandidateProfile | null
@@ -18,7 +18,6 @@ declare module "next-auth" {
 
   interface Session {
     user?: User & {
-      // Assurez-vous que id est toujours présent et que les autres champs sont là
       id: string
       role?: Role
       phone?: string | null
@@ -30,7 +29,6 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
-    // Ajouter les champs personnalisés à l'interface JWT
     id?: string
     role?: Role
     phone?: string | null
@@ -39,9 +37,10 @@ declare module "next-auth/jwt" {
   }
 }
 
+// Cette fonction est principalement pour s'assurer que le callbackUrl est sûr
+// et ne pointe pas vers une page d'authentification si l'utilisateur est déjà connecté.
+// La redirection finale basée sur le rôle sera gérée côté client.
 function determineSafeRedirectPath(callbackUrlFromAuth: string, baseUrl: string): string {
-  const defaultRedirectPath = "/"
-
   try {
     const fullCallbackUrl = callbackUrlFromAuth.startsWith("/")
       ? `${baseUrl}${callbackUrlFromAuth}`
@@ -51,15 +50,17 @@ function determineSafeRedirectPath(callbackUrlFromAuth: string, baseUrl: string)
 
     if (parsedUrl.origin === new URL(baseUrl).origin) {
       const path = parsedUrl.pathname
+      // Si le callbackUrl est une page d'authentification, rediriger vers la racine.
+      // Le useEffect côté client gérera ensuite la redirection basée sur le rôle.
       if (path.startsWith("/connexion") || path.startsWith("/inscription") || path.startsWith("/api/")) {
-        return defaultRedirectPath
+        return "/"
       }
-      return path
+      return path // Sinon, utiliser le chemin sûr fourni
     }
   } catch (e) {
     console.warn("Failed to parse callbackUrlFromAuth:", callbackUrlFromAuth, e)
   }
-  return defaultRedirectPath
+  return "/" // Fallback vers la racine si l'analyse échoue ou l'origine ne correspond pas
 }
 
 export const authOptions: NextAuthOptions = {
@@ -83,13 +84,19 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Mot de passe", type: "password" },
       },
       async authorize(credentials): Promise<NextAuthUser | null> {
-        // Utiliser NextAuthUser ici
+        console.log("[DEBUG AUTH] Tentative d'autorisation avec les identifiants:", credentials)
+
         if (!credentials?.email && !credentials?.phone) {
+          console.error("[DEBUG AUTH] Aucun email ou numéro de téléphone fourni.")
           throw new Error("Veuillez entrer votre email ou numéro de téléphone.")
         }
         if (!credentials?.password) {
+          console.error("[DEBUG AUTH] Aucun mot de passe fourni.")
           throw new Error("Veuillez entrer votre mot de passe.")
         }
+
+        const query = credentials.email ? { email: credentials.email } : { phone: credentials.phone }
+        console.log("[DEBUG AUTH] Recherche de l'utilisateur avec:", query)
 
         const userFromDb = await prisma.user.findFirst({
           where: {
@@ -104,21 +111,30 @@ export const authOptions: NextAuthOptions = {
           },
         })
 
-        if (!userFromDb || !userFromDb.hashedPassword) {
+        if (!userFromDb) {
+          console.error("[DEBUG AUTH] Utilisateur non trouvé pour la requête:", query)
           throw new Error("Identifiants incorrects.")
         }
 
+        if (!userFromDb.hashedPassword) {
+          console.error("[DEBUG AUTH] Utilisateur trouvé mais sans mot de passe haché:", userFromDb.email)
+          throw new Error("Identifiants incorrects.")
+        }
+
+        console.log("[DEBUG AUTH] Utilisateur trouvé:", userFromDb.email)
+        console.log("[DEBUG AUTH] Comparaison du mot de passe...")
         const isPasswordValid = await compare(credentials.password, userFromDb.hashedPassword)
 
         if (!isPasswordValid) {
+          console.error("[DEBUG AUTH] La comparaison du mot de passe a échoué pour l'utilisateur:", userFromDb.email)
           throw new Error("Identifiants incorrects.")
         }
 
+        console.log("[DEBUG AUTH] Mot de passe valide. Utilisateur autorisé:", userFromDb.email)
         const name =
           userFromDb.candidateProfile?.firstName || userFromDb.employerProfile?.companyName || userFromDb.email
         const image = userFromDb.candidateProfile?.avatar || userFromDb.employerProfile?.companyLogo || userFromDb.image
 
-        // Retourner un objet qui correspond à l'interface User de NextAuth, avec nos champs personnalisés
         return {
           id: userFromDb.id,
           email: userFromDb.email,
@@ -134,19 +150,17 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user, trigger, session }) {
-      // 'user' est de type NextAuthUser (qui inclut nos champs personnalisés grâce à declare module)
       if (user) {
         token.id = user.id
         token.role = user.role
         token.email = user.email
         token.name = user.name
-        token.picture = user.image // NextAuth utilise 'picture' pour l'image dans le token JWT
+        token.picture = user.image
         token.phone = user.phone
         token.candidateProfile = user.candidateProfile
         token.employerProfile = user.employerProfile
       }
       if (trigger === "update" && session) {
-        // 'session.user' est de type User (qui inclut nos champs personnalisés)
         if (session.user) {
           token.role = session.user.role
           token.phone = session.user.phone
@@ -160,13 +174,12 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token }) {
-      // 'session.user' est de type User (qui inclut nos champs personnalisés)
       if (token && session.user) {
-        session.user.id = token.id as string // id est toujours string après le jwt callback
+        session.user.id = token.id as string
         session.user.role = token.role
         session.user.name = token.name
         session.user.email = token.email
-        session.user.image = token.picture // Mapper 'picture' du token vers 'image' de la session
+        session.user.image = token.picture
         session.user.phone = token.phone
         session.user.candidateProfile = token.candidateProfile
         session.user.employerProfile = token.employerProfile
@@ -175,6 +188,8 @@ export const authOptions: NextAuthOptions = {
     },
     async redirect({ url, baseUrl }): Promise<string> {
       console.log("AuthOptions Redirect Callback Input:", { url, baseUrl })
+      // Utilise la logique de chemin de redirection sûr.
+      // Le useEffect côté client dans connexion/page.tsx gérera la redirection basée sur le rôle.
       const redirectPath = determineSafeRedirectPath(url, baseUrl)
       const finalRedirectUrl =
         `${baseUrl}${redirectPath === "/" && baseUrl.endsWith("/") ? "" : redirectPath.startsWith("/") ? redirectPath : `/${redirectPath}`}`
