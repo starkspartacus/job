@@ -1,102 +1,98 @@
+// Assurez-vous que les types exportés ici (Candidate, Job, User)
+// correspondent aux données que vous souhaitez manipuler côté client
+// et sont dérivés ou compatibles avec les modèles Prisma.
+
 import type {
-  User as PrismaUser,
+  User as PrismaUserWithDetails, // Alias pour éviter conflit
   CandidateProfile as PrismaCandidateProfile,
   EmployerProfile as PrismaEmployerProfile,
   Job as PrismaJob,
 } from "@prisma/client"
 
-// Define a type for the API user, including optional profile data
-export type User = Partial<PrismaUser> & {
-  candidateProfile?: Partial<PrismaCandidateProfile>
-  employerProfile?: Partial<PrismaEmployerProfile>
+// Type pour l'utilisateur de l'API, potentiellement avec des profils
+export type ApiUser = Omit<PrismaUserWithDetails, "hashedPassword" | "accounts" | "sessions"> & {
+  candidateProfile?: PrismaCandidateProfile | null
+  employerProfile?: PrismaEmployerProfile | null
+  // Le rôle est déjà inclus dans PrismaUserWithDetails
 }
 
-// Define more specific types for candidates and jobs for frontend usage
-export type Candidate = Omit<PrismaCandidateProfile, "userId" | "id"> & {
-  id: string // Use string for frontend IDs
-  userId: string
-  email: string // Include email from User
-  phone: string // Include phone from User
-  avatar?: string // Include avatar URL
+// Type pour un candidat exposé par l'API
+export type ApiCandidate = PrismaCandidateProfile & {
+  user: Pick<PrismaUserWithDetails, "id" | "email" | "phone" | "image" | "role"> // Inclure les infos utilisateur pertinentes
 }
 
-export type Job = Omit<PrismaJob, "employerId" | "id"> & {
-  id: string // Use string for frontend IDs
-  employerId: string
-  companyName: string // Include company name for display
-  companyLogo?: string // Include company logo for display
+// Type pour une offre d'emploi exposée par l'API
+export type ApiJob = PrismaJob & {
+  employer: Pick<PrismaEmployerProfile, "id" | "companyName" | "companyLogo"> // Inclure les infos employeur pertinentes
 }
 
-export interface ContactForm {
+export interface ContactFormData {
+  // Renommé pour éviter conflit avec ContactForm de Prisma
   name: string
   email: string
   message: string
+  subject?: string
 }
 
 // --- Client API centralisé (pour le frontend) ---
+// Ces fonctions feront des appels HTTP à vos Routes API côté serveur
 export const api = {
   candidates: {
-    getAll: async (filters?: any): Promise<Candidate[]> => {
-      // Cette fonction fera un appel HTTP à votre Route API côté serveur
+    getAll: async (filters?: any): Promise<ApiCandidate[]> => {
       const queryParams = new URLSearchParams(filters).toString()
       const response = await fetch(`/api/candidats?${queryParams}`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch candidates")
-      }
+      if (!response.ok) throw new Error("Failed to fetch candidates")
       return response.json()
     },
-    getById: async (id: string): Promise<Candidate | null> => {
-      // Cette fonction fera un appel HTTP à votre Route API côté serveur
+    getById: async (id: string): Promise<ApiCandidate | null> => {
       const response = await fetch(`/api/candidats/${id}`)
       if (!response.ok) {
-        // Gérer le cas où le candidat n'est pas trouvé
         if (response.status === 404) return null
         throw new Error(`Failed to fetch candidate with ID ${id}`)
       }
       return response.json()
     },
-    // `create`, `update`, `delete` operations for candidates would also be API calls
   },
   jobs: {
-    getAll: async (filters?: any): Promise<Job[]> => {
-      // Cette fonction fera un appel HTTP à votre Route API côté serveur
+    getAll: async (filters?: any): Promise<ApiJob[]> => {
       const queryParams = new URLSearchParams(filters).toString()
       const response = await fetch(`/api/offres?${queryParams}`)
-      if (!response.ok) {
-        throw new Error("Failed to fetch jobs")
-      }
+      if (!response.ok) throw new Error("Failed to fetch jobs")
       return response.json()
     },
-    getById: async (id: string): Promise<Job | null> => {
-      // Cette fonction fera un appel HTTP à votre Route API côté serveur
+    getById: async (id: string): Promise<ApiJob | null> => {
       const response = await fetch(`/api/offres/${id}`)
       if (!response.ok) {
-        // Gérer le cas où l'offre n'est pas trouvée
         if (response.status === 404) return null
         throw new Error(`Failed to fetch job with ID ${id}`)
       }
       return response.json()
     },
-    // `create`, `update`, `delete` operations for jobs would also be API calls
   },
   auth: {
-    register: async (userData: User) => {
+    register: async (userData: any /* UserFormData de features/inscription/types.ts */) => {
+      // Utiliser un type plus précis
       const response = await fetch("/api/register", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(userData),
       })
-      const data = await response.json()
-      return data
+      return response.json() // Retourner la réponse JSON (qui peut contenir success/message/error)
     },
-    // Login is handled by NextAuth signIn function directly.
   },
   contact: {
-    submit: async (formData: ContactForm): Promise<{ success: boolean; message: string }> => {
-      // This would typically be an API call to a server-side endpoint
+    submit: async (formData: ContactFormData): Promise<{ success: boolean; message: string }> => {
       console.log("Contact form submitted (simulated):", formData)
+      // Simuler un appel API
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      // Dans une vraie application, vous feriez un fetch vers une route API
+      // const response = await fetch("/api/contact", {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify(formData),
+      // });
+      // if (!response.ok) throw new Error("Failed to submit contact form");
+      // return response.json();
       return { success: true, message: "Message envoyé avec succès !" }
     },
   },

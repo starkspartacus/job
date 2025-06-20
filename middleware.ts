@@ -1,62 +1,61 @@
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
-import { withAuth } from "next-auth/middleware"
 
 // Fonction pour nettoyer l'URL des paramètres de redirection en boucle
-function cleanUrl(url: string): string {
+function cleanUrlPath(url: string): string {
   try {
     const urlObj = new URL(url)
-    // Supprimer les paramètres qui peuvent causer des boucles
-    urlObj.searchParams.delete("callbackUrl")
-    urlObj.searchParams.delete("error")
-    return urlObj.pathname
+    return urlObj.pathname // Retourne seulement le chemin, sans query params
   } catch {
-    return url
+    if (url.startsWith("/")) return url
+    return "/" // Fallback sûr
   }
 }
 
-export default withAuth(
-  async function middleware(req) {
-    const token = await getToken({ req })
-    const isAuth = !!token
-    const isAuthPage = req.nextUrl.pathname.startsWith("/connexion") || 
-                      req.nextUrl.pathname.startsWith("/inscription")
+export async function middleware(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
+  const isAuth = !!token
+  const { pathname } = req.nextUrl
 
-    // Ne pas rediriger les requêtes API
-    if (req.nextUrl.pathname.startsWith("/api")) {
-      return null
-    }
-
-    // Si l'utilisateur est sur une page d'auth et est authentifié
-    if (isAuthPage && isAuth) {
-      return NextResponse.redirect(new URL("/espace-candidat", req.url))
-    }
-
-    // Si l'utilisateur n'est pas sur une page d'auth et n'est pas authentifié
-    if (!isAuthPage && !isAuth && !req.nextUrl.pathname.startsWith("/api/auth")) {
-      const from = cleanUrl(req.nextUrl.pathname)
-      const redirectUrl = new URL("/connexion", req.url)
-      if (from !== "/connexion") {
-        redirectUrl.searchParams.set("callbackUrl", from)
-      }
-      return NextResponse.redirect(redirectUrl)
-    }
-
-    return null
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => true // On laisse le middleware gérer l'autorisation
-    },
+  // Exclure les routes API générales (sauf /api/auth) du traitement du middleware
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth")) {
+    return NextResponse.next()
   }
-)
 
-// Configurer les chemins qui nécessitent une authentification
+  const isAuthPage = pathname.startsWith("/connexion") || pathname.startsWith("/inscription")
+
+  // Si l'utilisateur est sur une page d'authentification et est déjà authentifié
+  if (isAuthPage && isAuth) {
+    return NextResponse.redirect(new URL("/", req.url))
+  }
+
+  // Pages protégées nécessitant une authentification
+  const protectedPaths = ["/espace-candidat", "/espace-recruteur"]
+  if (protectedPaths.some((p) => pathname.startsWith(p)) && !isAuth) {
+    const callbackUrl = cleanUrlPath(req.url)
+    const redirectUrl = new URL("/connexion", req.url)
+    // Éviter d'ajouter callbackUrl si c'est déjà une page d'auth ou la racine (pour éviter des boucles ou redirections inutiles)
+    if (callbackUrl !== "/connexion" && callbackUrl !== "/inscription" && callbackUrl !== "/") {
+      redirectUrl.searchParams.set("callbackUrl", callbackUrl)
+    }
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  return NextResponse.next()
+}
+
+// Configurer les chemins sur lesquels le middleware s'exécutera
 export const config = {
   matcher: [
-    "/espace-candidat/:path*",
-    "/espace-recruteur/:path*",
-    "/connexion",
-    "/inscription",
+    /*
+     * Appliquer le middleware à tous les chemins sauf ceux qui commencent par:
+     * - _next/static (fichiers statiques)
+     * - _next/image (optimisation d'images)
+     * - favicon.ico (fichier favicon)
+     * - images/ (dossier public/images)
+     * - placeholder.svg (placeholder images)
+     * Les routes API générales (sauf /api/auth) sont exclues au début de la fonction middleware.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|images|placeholder.svg).*)",
   ],
-} 
+}

@@ -1,431 +1,171 @@
-"use client"
-
-import React, { useState, useTransition, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route" // Ajustez le chemin
+import { redirect } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Progress } from "@/components/ui/progress"
-import {
-  User,
-  Briefcase,
-  MessageSquare,
-  Settings,
-  LogOut,
-  Edit,
-  Eye,
-  Star,
-  MapPin,
-  Phone,
-  Mail,
-  Calendar,
-  Plus,
-  Download,
-} from "lucide-react"
+import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { signOut, useSession } from "next-auth/react"
-import { ExperienceList } from "@/components/espace-candidat/ExperienceList"
+import { Edit3, LogOut, Settings, UserCircle, Briefcase, Star, BookOpen } from "lucide-react"
 import { SkillList } from "@/components/espace-candidat/SkillList"
-import { addExperience, updateExperience, addSkill, updateSkill, getCandidateById } from "@/app/actions/candidates"
-import { toast } from "sonner"
-import type { CandidateProfile } from "@/app/actions/candidates"
-import { useRouter } from "next/navigation"
+import { ExperienceList } from "@/components/espace-candidat/ExperienceList"
+import { getCandidateProfileWithDetails } from "@/app/actions/candidates" // Nouvelle action
+import { revalidatePath } from "next/cache" // Pour le refresh manuel
 
-export default function EspaceCandidatPage() {
-  const [activeTab, setActiveTab] = useState("dashboard")
-  const [isPending, startTransition] = useTransition()
-  const [candidateData, setCandidateData] = useState<CandidateProfile | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const router = useRouter()
-  
-  const { data: session, status } = useSession({
-    required: true,
-    onUnauthenticated() {
-      router.replace("/connexion")
-    }
-  })
+// Fonction de rafraîchissement à passer aux listes
+async function refreshCandidateData() {
+  "use server"
+  revalidatePath("/espace-candidat")
+}
 
-  const refreshData = async () => {
-    if (!session?.user?.candidateProfile?.id) return
-    
-    try {
-      const data = await getCandidateById(session.user.candidateProfile.id)
-      setCandidateData(data)
-    } catch (error) {
-      console.error('Error refreshing data:', error)
-      toast.error("Erreur lors du rafraîchissement des données")
-    } finally {
-      setIsLoading(false)
-    }
+export default async function EspaceCandidatPage() {
+  const session = await getServerSession(authOptions)
+
+  if (!session || !session.user || session.user.role !== "CANDIDATE") {
+    redirect("/connexion?callbackUrl=/espace-candidat")
   }
 
-  useEffect(() => {
-    if (status === "loading") return
-    
-    if (status === "authenticated") {
-      if (session?.user?.role !== "CANDIDATE") {
-        router.replace("/")
-        return
-      }
-      refreshData()
-    }
-  }, [status, session, router])
+  const candidateProfile = await getCandidateProfileWithDetails()
 
-  const handleSignOut = async () => {
-    try {
-      await signOut({ 
-        redirect: true, 
-        callbackUrl: "/connexion" 
-      })
-    } catch (error) {
-      console.error("Erreur lors de la déconnexion:", error)
-      toast.error("Erreur lors de la déconnexion")
-    }
-  }
-
-  // Afficher un état de chargement pendant la vérification de la session
-  if (status === "loading" || isLoading) {
+  if (!candidateProfile) {
+    // Gérer le cas où le profil n'existe pas encore, peut-être rediriger vers une page de création de profil
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold mb-2">Chargement...</h2>
-          <p className="text-gray-600">Veuillez patienter pendant le chargement de vos données.</p>
-        </div>
+      <div className="container mx-auto px-4 py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profil Candidat Introuvable</CardTitle>
+            <CardDescription>
+              Il semble que votre profil candidat n'ait pas encore été créé ou est incomplet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-4">
+              Veuillez compléter votre profil pour accéder à toutes les fonctionnalités de l'espace candidat.
+            </p>
+            <Link href="/profil/candidat/edition">
+              {" "}
+              {/* Adaptez ce lien */}
+              <Button>Compléter mon profil</Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  if (!candidateData) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-red-600 mb-2">Erreur</h2>
-          <p className="text-gray-600">Impossible de charger les données du profil.</p>
-          <Button 
-            onClick={refreshData} 
-            className="mt-4"
-            variant="outline"
-          >
-            Réessayer
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  const handleSaveExperience = async (data: any, id?: string) => {
-    const candidateId = session?.user?.candidateProfile?.id
-    if (!candidateId) {
-      toast.error("Profil candidat non trouvé")
-      return
-    }
-
-    startTransition(async () => {
-      try {
-        if (id) {
-          await updateExperience(id, data)
-        } else {
-          await addExperience(candidateId, data)
-        }
-        toast.success(id ? "Expérience modifiée" : "Expérience ajoutée")
-        await refreshData()
-      } catch (error) {
-        toast.error("Une erreur est survenue")
-      }
-    })
-  }
-
-  const handleSaveSkill = async (data: any, id?: string) => {
-    const candidateId = session?.user?.candidateProfile?.id
-    if (!candidateId) {
-      toast.error("Profil candidat non trouvé")
-      return
-    }
-
-    startTransition(async () => {
-      try {
-        if (id) {
-          await updateSkill(id, data)
-        } else {
-          await addSkill(candidateId, data)
-        }
-        toast.success(id ? "Compétence modifiée" : "Compétence ajoutée")
-        await refreshData()
-      } catch (error) {
-        toast.error("Une erreur est survenue")
-      }
-    })
-  }
-
-  const calculateProfileCompletion = () => {
-    let score = 0
-    let total = 0
-
-    // Photo de profil
-    if (candidateData.avatar) { score++; }
-    total++
-
-    // Informations de base
-    if (candidateData.firstName && candidateData.lastName) { score++; }
-    total++
-
-    // Contact
-    if (candidateData.email && candidateData.phone) { score++; }
-    total++
-
-    // Localisation
-    if (candidateData.country && candidateData.city) { score++; }
-    total++
-
-    // Expériences
-    if (candidateData.experiences.length > 0) { score++; }
-    total++
-
-    // Compétences
-    if (candidateData.skills.length > 0) { score++; }
-    total++
-
-    // Langues
-    if (candidateData.languages.length > 0) { score++; }
-    total++
-
-    return Math.round((score / total) * 100)
-  }
-
-  const profileCompletion = calculateProfileCompletion()
+  const { user } = session
+  const profile = candidateProfile // Utiliser le profil complet récupéré
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="container mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <header className="bg-white/80 backdrop-blur-md shadow-sm border-b sticky top-0 z-40">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
-                <User className="w-5 h-5 text-white" />
+            <Link href="/" className="flex items-center space-x-2 group">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                <UserCircle className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-xl font-bold text-gray-900">AfricaJobs</h1>
+              <h1 className="text-xl font-bold text-gray-900">Espace Candidat</h1>
             </Link>
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm">
-                <MessageSquare className="w-5 h-5" />
+            <div className="flex items-center space-x-3">
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/profil/candidat/edition">
+                  {" "}
+                  {/* Adaptez ce lien */}
+                  <Settings className="w-4 h-4 mr-2" />
+                  Paramètres
+                </Link>
               </Button>
-              <div className="flex items-center space-x-2">
-                <Avatar>
-                  <AvatarImage src={candidateData.avatar || "/placeholder.svg?height=32&width=32"} />
-                  <AvatarFallback>{`${candidateData.firstName[0]}${candidateData.lastName[0]}`}</AvatarFallback>
-                </Avatar>
-                <div className="hidden md:block">
-                  <p className="text-sm font-medium">{`${candidateData.firstName} ${candidateData.lastName}`}</p>
-                  <p className="text-xs text-gray-500">Candidat</p>
-                </div>
-              </div>
+              <Button variant="outline" size="sm" asChild className="bg-white">
+                <Link href="/api/auth/signout">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Déconnexion
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar */}
-          <div className="lg:w-64">
-            <Card>
-              <CardContent className="p-4">
-                <nav className="space-y-2">
-                  <Button
-                    variant={activeTab === "dashboard" ? "default" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => setActiveTab("dashboard")}
-                  >
-                    <User className="w-4 h-4 mr-2" />
-                    Mon profil
+      <main className="container mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Colonne de gauche: Profil et Navigation */}
+          <aside className="lg:col-span-1 space-y-6">
+            <Card className="shadow-lg bg-white">
+              <CardContent className="p-6 text-center">
+                <Avatar className="w-24 h-24 mx-auto mb-4 ring-2 ring-blue-500 ring-offset-2">
+                  <AvatarImage src={profile.avatar  || undefined} alt={profile.firstName} />
+                  <AvatarFallback className="text-2xl bg-blue-100 text-blue-700">
+                    {profile.firstName?.charAt(0)}
+                    {profile.lastName?.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {profile.firstName} {profile.lastName}
+                </h2>
+                <p className="text-blue-600 font-medium mb-1">{user.email}</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  {profile.city && profile.country ? `${profile.city}, ${profile.country}` : "Localisation non définie"}
+                </p>
+                <Link href="/profil/candidat/edition">
+                  {" "}
+                  {/* Adaptez ce lien */}
+                  <Button variant="default" className="w-full bg-blue-600 hover:bg-blue-700">
+                    <Edit3 className="w-4 h-4 mr-2" />
+                    Modifier le profil
                   </Button>
-                  <Button
-                    variant={activeTab === "applications" ? "default" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => setActiveTab("applications")}
-                  >
-                    <Briefcase className="w-4 h-4 mr-2" />
-                    Mes candidatures
-                  </Button>
-                  <Button
-                    variant={activeTab === "messages" ? "default" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => setActiveTab("messages")}
-                  >
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Messages
-                  </Button>
-                  <Button
-                    variant={activeTab === "settings" ? "default" : "ghost"}
-                    className="w-full justify-start"
-                    onClick={() => setActiveTab("settings")}
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Paramètres
-                  </Button>
-                  <hr className="my-4" />
-                  <Button variant="ghost" className="w-full justify-start text-red-600 hover:text-red-700" onClick={handleSignOut}>
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Déconnexion
-                  </Button>
-                </nav>
+                </Link>
               </CardContent>
             </Card>
-          </div>
 
-          {/* Main Content */}
-          <div className="flex-1">
-            {activeTab === "dashboard" && (
-              <div className="space-y-6">
-                {/* Profile Header */}
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
-                      <Avatar className="w-24 h-24">
-                        <AvatarImage src={candidateData.avatar || "/placeholder.svg?height=96&width=96"} />
-                        <AvatarFallback className="text-2xl">{`${candidateData.firstName[0]}${candidateData.lastName[0]}`}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-gray-900">{`${candidateData.firstName} ${candidateData.lastName}`}</h2>
-                        <p className="text-lg text-gray-600 mb-2">{candidateData.experienceLevel || "Niveau d'expérience non renseigné"}</p>
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-4">
-                          {candidateData.city && candidateData.country && (
-                            <div className="flex items-center">
-                              <MapPin className="w-4 h-4 mr-1" />
-                              {`${candidateData.city}, ${candidateData.country}`}
-                            </div>
-                          )}
-                          <div className="flex items-center">
-                            <Phone className="w-4 h-4 mr-1" />
-                            {candidateData.phone}
-                          </div>
-                          <div className="flex items-center">
-                            <Mail className="w-4 h-4 mr-1" />
-                            {candidateData.email}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center">
-                            <Star className="w-4 h-4 text-yellow-500 mr-1" />
-                            <span className="font-medium">{candidateData.rating.toFixed(1)}</span>
-                            <span className="text-gray-500 ml-1">({candidateData.reviews} avis)</span>
-                          </div>
-                          {candidateData.verified && (
-                            <Badge variant="secondary">Profil vérifié</Badge>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex flex-col space-y-2">
-                        <Button variant="outline">
-                          <Edit className="w-4 h-4 mr-2" />
-                          Modifier profil
-                        </Button>
-                        <Button variant="outline">
-                          <Download className="w-4 h-4 mr-2" />
-                          Télécharger CV
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            <Card className="shadow-md bg-white">
+              <CardHeader>
+                <CardTitle className="text-lg">Navigation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {[
+                  { label: "Mon Profil Public", href: `/candidats/${profile.id}`, icon: UserCircle },
+                  { label: "Mes Candidatures", href: "/espace-candidat/candidatures", icon: Briefcase },
+                  { label: "Offres Sauvegardées", href: "/espace-candidat/offres-sauvegardees", icon: Star },
+                  { label: "Formations & Conseils", href: "/espace-candidat/conseils", icon: BookOpen },
+                ].map((item) => (
+                  <Button key={item.label} variant="ghost" className="w-full justify-start" asChild>
+                    <Link href={item.href}>
+                      <item.icon className="w-4 h-4 mr-3 text-gray-600" />
+                      {item.label}
+                    </Link>
+                  </Button>
+                ))}
+              </CardContent>
+            </Card>
+          </aside>
 
-                {/* Profile Completion */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Complétude du profil</CardTitle>
-                    <CardDescription>Un profil complet augmente vos chances d'être contacté</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Progression</span>
-                        <span className="text-sm text-gray-600">{profileCompletion}%</span>
-                      </div>
-                      <Progress value={profileCompletion} className="h-2" />
-                      <div className="space-y-2 text-sm">
-                        <div className={`flex items-center ${candidateData.avatar ? "text-green-600" : "text-gray-400"}`}>
-                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.avatar ? "bg-green-600" : "bg-gray-400"}`} />
-                          Photo de profil {candidateData.avatar ? "ajoutée" : "manquante"}
-                        </div>
-                        <div className={`flex items-center ${candidateData.experiences.length > 0 ? "text-green-600" : "text-gray-400"}`}>
-                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.experiences.length > 0 ? "bg-green-600" : "bg-gray-400"}`} />
-                          Expériences professionnelles {candidateData.experiences.length > 0 ? "renseignées" : "manquantes"}
-                        </div>
-                        <div className={`flex items-center ${candidateData.skills.length > 0 ? "text-green-600" : "text-gray-400"}`}>
-                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.skills.length > 0 ? "bg-green-600" : "bg-gray-400"}`} />
-                          Compétences {candidateData.skills.length > 0 ? "ajoutées" : "manquantes"}
-                        </div>
-                        <div className={`flex items-center ${candidateData.languages.length > 0 ? "text-green-600" : "text-gray-400"}`}>
-                          <div className={`w-2 h-2 rounded-full mr-2 ${candidateData.languages.length > 0 ? "bg-green-600" : "bg-gray-400"}`} />
-                          Langues {candidateData.languages.length > 0 ? "renseignées" : "manquantes"}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Experience */}
-                <Card>
-                  <CardContent className="p-6">
-                    <ExperienceList
-                      experiences={candidateData.experiences}
-                      onSave={handleSaveExperience}
-                      refresh={refreshData}
-                    />
-                  </CardContent>
-                </Card>
-
-                {/* Skills */}
-                <Card>
-                  <CardContent className="p-6">
-                    <SkillList
-                      skills={candidateData.skills}
-                      onSave={handleSaveSkill}
-                      refresh={refreshData}
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {activeTab === "applications" && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-gray-900">Mes candidatures</h2>
-                  <Link href="/offres">
-                    <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600">
-                      Rechercher des offres
-                    </Button>
-                  </Link>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <Card>
-                    <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-blue-600">3</div>
-                      <div className="text-sm text-gray-600">Candidatures envoyées</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-green-600">1</div>
-                      <div className="text-sm text-gray-600">Profil consulté</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4 text-center">
-                      <div className="text-2xl font-bold text-orange-600">0</div>
-                      <div className="text-sm text-gray-600">Entretiens programmés</div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Colonne de droite: Contenu principal (Compétences, Expériences, etc.) */}
+          <section className="lg:col-span-2 space-y-8">
+            <Card className="shadow-md bg-white">
+              <CardHeader>
+                <CardTitle>Aperçu du Profil</CardTitle>
+                <CardDescription>Gérez vos informations professionnelles.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Section Compétences */}
+                <SkillList
+                  skills={profile.skills || []}
+                  candidateProfileId={profile.id}
+                  refreshSkills={refreshCandidateData}
+                />
+                <hr className="my-6" />
+                {/* Section Expériences */}
+                <ExperienceList
+                  experiences={profile.experiences || []}
+                  candidateProfileId={profile.id}
+                  refreshExperiences={refreshCandidateData}
+                />
+                {/* Ajoutez d'autres sections ici: Formations, Portfolio, etc. */}
+              </CardContent>
+            </Card>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

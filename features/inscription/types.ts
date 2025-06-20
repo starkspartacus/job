@@ -1,34 +1,38 @@
+import type { Role } from "@prisma/client"
+
 export interface UserFormData {
-    email?: string
-    password?: string
-    phone?: string
-    role?: "candidate" | "employer"
-    // Candidate specific fields
-    firstName?: string
-    lastName?: string
-    dateOfBirth?: string
-    gender?: string
-    experienceLevel?: string
-    educationLevel?: string
-    skills?: string[]
-    languages?: string[]
-    availability?: string
-    salaryExpectation?: string
-    workAuthorization?: boolean
-    avatar?: string // For candidate profile image URL
-    // Employer specific fields
-    companyName?: string
-    companyType?: string
-    companySize?: string
-    foundingYear?: string
-    companyDescription?: string
-    contactPerson?: string
-    website?: string
-    socialMedia?: string
-    companyAddress?: string
-    country?: string
-    city?: string
-    commune?: string
-    companyLogo?: string // For employer company logo URL
-  }
-  
+  // Champs communs
+  email?: string
+  password?: string
+  phone?: string
+  role?: Role // Utiliser l'enum Role
+
+  // Champs spécifiques au candidat
+  firstName?: string
+  lastName?: string
+  dateOfBirth?: string // Format YYYY-MM-DD
+  gender?: string
+  experienceLevel?: string
+  educationLevel?: string
+  skills?: string[] // Sera un tableau de chaînes
+  languages?: string[] // Sera un tableau de chaînes
+  availability?: string
+  salaryExpectation?: string
+  workAuthorization?: boolean
+  avatar?: string // URL de l'image
+
+  // Champs spécifiques à l'employeur
+  companyName?: string
+  companyType?: string
+  companySize?: string
+  foundingYear?: string // Sera une chaîne, convertie en nombre côté serveur
+  companyDescription?: string
+  contactPerson?: string
+  website?: string
+  socialMediaLinks?: string // Pourrait être un JSON stringifié ou géré différemment
+  companyAddress?: string
+  country?: string
+  city?: string
+  commune?: string
+  companyLogo?: string // URL de l'image
+}

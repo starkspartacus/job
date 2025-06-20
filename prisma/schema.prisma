@@ -7,19 +7,60 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model User {
-  id              String           @id @default(auto()) @map("_id") @db.ObjectId
-  email           String           @unique
-  hashedPassword  String
-  phone           String?          @unique
-  role            String // "candidate" or "employer"
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  emailVerified   DateTime?
+enum Role {
+  CANDIDATE
+  EMPLOYER
+  ADMIN
+}
 
-  candidateProfile CandidateProfile?
-  employerProfile  EmployerProfile?
-  sessions         Session[]
+model User {
+  id                String            @id @default(auto()) @map("_id") @db.ObjectId
+  email             String            @unique
+  hashedPassword    String?
+  phone             String?           @unique
+  role              Role              @default(CANDIDATE)
+  emailVerified     DateTime?
+  image             String? // Peut être l'avatar ou le logo, utilisé par NextAuth
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  accounts          Account[]
+  sessions          Session[]
+  candidateProfile  CandidateProfile?
+  employerProfile   EmployerProfile?
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String   @id @map("_id")
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 model CandidateProfile {
@@ -28,27 +69,57 @@ model CandidateProfile {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName          String
   lastName           String
-  dateOfBirth        String?
+  dateOfBirth        String?   // Format YYYY-MM-DD
   gender             String?
-  experienceLevel    String?
-  educationLevel     String?
-  languages          String[]  @default([])
-  availability       String?
-  salaryExpectation  String?
+  experienceLevel    String?   // Ex: "junior", "mid-level", "senior"
+  educationLevel     String?   // Ex: "bac", "licence", "master"
+  availability       String?   // Ex: "immediate", "1-month"
+  salaryExpectation  String?   // Ex: "150000-200000 FCFA"
   workAuthorization  Boolean?
   rating             Float     @default(0)
-  reviews            Int       @default(0)
-  avatar             String? // Photo de profil du candidat
-  lastActive         String?
+  reviewsCount       Int       @default(0) @map("reviews") // Renommé pour clarté
+  avatar             String?
+  lastActive         DateTime? @default(now())
   verified           Boolean   @default(false)
   responseTime       String?
   responseRate       Int?
   country            String?
   city               String?
   commune            String?
-  experiences        Experience[]
-  skills             Skill[]
-  applications       Application[]
+  bio                String?   // Ajouté pour une description du candidat
+  portfolioLinks     String[]  @default([]) // Liens vers portfolio, LinkedIn, etc.
+  cvUrl              String?   // Lien vers le CV uploadé
+
+  skills             Skill[]     // Relation vers les compétences
+  experiences        Experience[] // Relation vers les expériences
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Skill {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  name               String    // Nom de la compétence, ex: "JavaScript", "Service client"
+  level              Int       // Niveau de 0 à 100
+  category           String?   // Ex: "Langage de programmation", "Soft skill", "Langue parlée"
+  candidateProfileId String    @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateProfileId, name]) // Un candidat ne peut pas avoir deux fois la même compétence
+}
+
+model Experience {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  title              String    // Titre du poste, ex: "Développeur Web"
+  company            String
+  location           String?
+  periodStart        DateTime  // Date de début
+  periodEnd          DateTime? // Date de fin (null si en cours)
+  isCurrent          Boolean   @default(false) // True si c'est le poste actuel
+  description        String?
+  achievements       String[]  @default([]) // Liste des réalisations
+  candidateProfileId String    @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
 }
 
 model EmployerProfile {
@@ -62,71 +133,41 @@ model EmployerProfile {
   companyDescription String?
   contactPerson      String?
   website            String?
-  socialMedia        String?
+  socialMediaLinks   Json?     // { "linkedin": "url", "twitter": "url" }
   companyAddress     String?
   country            String?
   city               String?
   commune            String?
-  avatar             String? // Photo de profil du candidat (si l'employeur a un avatar personnel)
-  companyLogo        String? // NEW FIELD: Logo de l'entreprise
+  companyLogo        String?
   jobs               Job[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 model Job {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  title        String
-  employerId   String    @db.ObjectId
-  employer     EmployerProfile @relation(fields: [employerId], references: [id])
-  company      String // Duplicated from employer for easier querying (can be denormalized)
-  location     String
-  country      String
-  city         String
-  commune      String
-  type         String
-  salary       String
-  posted       DateTime  @default(now())
-  description  String
-  requirements String[]  @default([])
-  category     String
-  featured     Boolean   @default(false)
-  applications       Application[]
-}
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  title               String
+  employerProfileId   String    @db.ObjectId
+  employer            EmployerProfile @relation(fields: [employerProfileId], references: [id], onDelete: Cascade)
+  location            String
+  country             String?
+  city                String?
+  commune             String?
+  jobType             String    // Ex: "CDI", "CDD", "Freelance"
+  salaryRange         String?
+  postedDate          DateTime  @default(now()) @map("posted")
+  description         String
+  requirements        String[]  @default([])
+  responsibilities    String[]  @default([]) // Ajouté
+  benefits            String[]  @default([]) // Ajouté
+  category            String    // Ex: "serveuse", "developpeur"
+  featured            Boolean   @default(false)
+  applicationDeadline DateTime?
+  status              String    @default("OPEN") // "OPEN", "CLOSED", "FILLED"
+  views               Int       @default(0)
+  applicationsCount   Int       @default(0)
+  skillsRequired      String[]  @default([]) // Compétences spécifiques requises pour le poste
 
-model Session {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessionToken String @unique
-  expires   DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Experience {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  candidateId   String   @db.ObjectId
-  candidate     CandidateProfile @relation(fields: [candidateId], references: [id])
-  title         String
-  company       String
-  periodStart   String // ex: "2022"
-  periodEnd     String // ex: "2024" ou "en cours"
-  description   String
-}
-
-model Skill {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  candidateId   String   @db.ObjectId
-  candidate     CandidateProfile @relation(fields: [candidateId], references: [id])
-  name          String
-  level         Int // 0-100
-}
-
-model Application {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  candidateId  String   @db.ObjectId
-  candidate    CandidateProfile @relation(fields: [candidateId], references: [id])
-  jobId        String   @db.ObjectId
-  job          Job      @relation(fields: [jobId], references: [id])
-  status       String   // "pending", "reviewed", "rejected", etc.
-  appliedDate  DateTime @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
