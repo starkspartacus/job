@@ -5,7 +5,7 @@ export interface UserFormData {
   email?: string
   password?: string
   phone?: string
-  role?: Role // Utiliser l'enum Role
+  role?: Role
 
   // Champs spécifiques au candidat
   firstName?: string

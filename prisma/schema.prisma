@@ -7,10 +7,72 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Nouvelles énumérations pour une meilleure structuration
 enum Role {
   CANDIDATE
   EMPLOYER
   ADMIN
+}
+
+enum GenderEnum {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum ExperienceLevelEnum {
+  ENTRY_LEVEL
+  JUNIOR
+  MID_LEVEL
+  SENIOR
+  LEAD
+  EXECUTIVE
+}
+
+enum EducationLevelEnum {
+  NONE
+  HIGH_SCHOOL
+  ASSOCIATE
+  BACHELOR
+  MASTER
+  DOCTORATE
+  VOCATIONAL
+}
+
+enum AvailabilityEnum {
+  IMMEDIATE
+  ONE_MONTH
+  TWO_MONTHS
+  THREE_MONTHS_PLUS
+  NOT_LOOKING
+}
+
+enum SkillCategoryEnum {
+  TECHNICAL
+  SOFT_SKILL
+  LANGUAGE
+  MANAGEMENT
+  DESIGN
+  MARKETING
+  SALES
+  OTHER
+}
+
+enum JobTypeEnum {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  TEMPORARY
+  INTERNSHIP
+  FREELANCE
+}
+
+enum JobStatusEnum {
+  OPEN
+  CLOSED
+  FILLED
+  ARCHIVED
 }
 
 model User {
@@ -64,48 +126,51 @@ model VerificationToken {
 }
 
 model CandidateProfile {
-  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
-  userId             String    @unique @db.ObjectId
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(auto()) @map("_id") @db.ObjectId
+  userId             String              @unique @db.ObjectId
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName          String
   lastName           String
-  dateOfBirth        String?   // Format YYYY-MM-DD
-  gender             String?
-  experienceLevel    String?   // Ex: "junior", "mid-level", "senior"
-  educationLevel     String?   // Ex: "bac", "licence", "master"
-  availability       String?   // Ex: "immediate", "1-month"
-  salaryExpectation  String?   // Ex: "150000-200000 FCFA"
+  dateOfBirth        String?             // Format YYYY-MM-DD
+  gender             GenderEnum?
+  experienceLevel    ExperienceLevelEnum?
+  educationLevel     EducationLevelEnum?
+  availability       AvailabilityEnum?
+  salaryExpectation  String?             // Ex: "150000-200000 FCFA"
   workAuthorization  Boolean?
-  rating             Float     @default(0)
-  reviewsCount       Int       @default(0) @map("reviews") // Renommé pour clarté
+  rating             Float               @default(0)
+  reviewsCount       Int                 @default(0) @map("reviews")
   avatar             String?
-  lastActive         DateTime? @default(now())
-  verified           Boolean   @default(false)
+  lastActive         DateTime?           @default(now())
+  verified           Boolean             @default(false)
   responseTime       String?
   responseRate       Int?
   country            String?
   city               String?
   commune            String?
-  bio                String?   // Ajouté pour une description du candidat
-  portfolioLinks     String[]  @default([]) // Liens vers portfolio, LinkedIn, etc.
-  cvUrl              String?   // Lien vers le CV uploadé
+  bio                String?             // Ajouté pour une description du candidat
+  portfolioLinks     String[]            @default([]) // Liens vers portfolio, LinkedIn, etc.
+  cvUrl              String?             // Lien vers le CV uploadé
+  languages          String[]            @default([]) // Langues parlées (ex: ["Français", "Anglais"])
 
-  skills             Skill[]     // Relation vers les compétences
-  experiences        Experience[] // Relation vers les expériences
+  skills             Skill[]             // Relation vers les compétences
+  experiences        Experience[]        // Relation vers les expériences
+  education          Education[]         // Relation vers la formation
+  certifications     Certification[]     // Relation vers les certifications
 
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model Skill {
-  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
-  name               String    // Nom de la compétence, ex: "JavaScript", "Service client"
-  level              Int       // Niveau de 0 à 100
-  category           String?   // Ex: "Langage de programmation", "Soft skill", "Langue parlée"
-  candidateProfileId String    @db.ObjectId
-  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+  id                 String            @id @default(auto()) @map("_id") @db.ObjectId
+  name               String            // Nom de la compétence, ex: "JavaScript", "Service client"
+  level              Int               // Niveau de 0 à 100
+  category           SkillCategoryEnum? // Utilisation de la nouvelle énumération
+  candidateProfileId String            @db.ObjectId
+  candidateProfile   CandidateProfile  @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
 
-  @@unique([candidateProfileId, name]) // Un candidat ne peut pas avoir deux fois la même compétence
+  @@unique([candidateProfileId, name])
 }
 
 model Experience {
@@ -119,6 +184,27 @@ model Experience {
   description        String?
   achievements       String[]  @default([]) // Liste des réalisations
   candidateProfileId String    @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+}
+
+model Education {
+  id                 String           @id @default(auto()) @map("_id") @db.ObjectId
+  degree             String           // Ex: "Licence en Informatique"
+  school             String
+  location           String?
+  year               Int              // Année d'obtention
+  mention            String?          // Ex: "Très bien"
+  candidateProfileId String           @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+}
+
+model Certification {
+  id                 String           @id @default(auto()) @map("_id") @db.ObjectId
+  name               String           // Nom de la certification, ex: "AWS Certified Developer"
+  issuer             String           // Organisme émetteur
+  date               DateTime         // Date d'obtention
+  verified           Boolean          @default(false)
+  candidateProfileId String           @db.ObjectId
   candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
 }
 
@@ -145,29 +231,29 @@ model EmployerProfile {
 }
 
 model Job {
-  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String        @id @default(auto()) @map("_id") @db.ObjectId
   title               String
-  employerProfileId   String    @db.ObjectId
+  employerProfileId   String        @db.ObjectId
   employer            EmployerProfile @relation(fields: [employerProfileId], references: [id], onDelete: Cascade)
   location            String
   country             String?
   city                String?
   commune             String?
-  jobType             String    // Ex: "CDI", "CDD", "Freelance"
+  jobType             JobTypeEnum   // Utilisation de la nouvelle énumération
   salaryRange         String?
-  postedDate          DateTime  @default(now()) @map("posted")
+  postedDate          DateTime      @default(now()) @map("posted")
   description         String
-  requirements        String[]  @default([])
-  responsibilities    String[]  @default([]) // Ajouté
-  benefits            String[]  @default([]) // Ajouté
-  category            String    // Ex: "serveuse", "developpeur"
-  featured            Boolean   @default(false)
+  requirements        String[]      @default([])
+  responsibilities    String[]      @default([])
+  benefits            String[]      @default([])
+  category            String
+  featured            Boolean       @default(false)
   applicationDeadline DateTime?
-  status              String    @default("OPEN") // "OPEN", "CLOSED", "FILLED"
-  views               Int       @default(0)
-  applicationsCount   Int       @default(0)
-  skillsRequired      String[]  @default([]) // Compétences spécifiques requises pour le poste
+  status              JobStatusEnum @default(OPEN) // Utilisation de la nouvelle énumération
+  views               Int           @default(0)
+  applicationsCount   Int           @default(0)
+  skillsRequired      String[]      @default([])
 
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }

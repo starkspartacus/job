@@ -1,120 +1,151 @@
 import type {
-    User as PrismaUser,
-    CandidateProfile as PrismaCandidateProfile,
-    EmployerProfile as PrismaEmployerProfile,
-    Job as PrismaJob,
-    Skill as PrismaSkill,
-    Experience as PrismaExperience,
-    Role as PrismaRole,
-  } from "@prisma/client"
-  
-  // --- Enums ---
-  export type Role = PrismaRole // Exporter l'enum Role
-  
-  // --- User & Auth Types ---
-  export type AppUser = Omit<PrismaUser, "hashedPassword" | "accounts" | "sessions" | "emailVerified"> & {
-    candidateProfile?: AppCandidateProfile | null // Utiliser les types App
-    employerProfile?: AppEmployerProfile | null // Utiliser les types App
-    emailVerified?: string | null // Convertir DateTime en string pour le client si nécessaire
-  }
-  
-  // --- Candidate Types ---
-  export type AppSkill = Omit<PrismaSkill, "candidateProfileId"> & {
-    // id est déjà string
-  }
-  
-  export type AppExperience = Omit<PrismaExperience, "candidateProfileId"> & {
-    // id est déjà string
-    // Convertir les dates en string pour les formulaires si nécessaire, ou gérer la conversion dans les composants
-    periodStart: string // ex: "2022-01-15"
-    periodEnd?: string | null // ex: "2023-05-30" ou null
-  }
-  
-  export type AppCandidateProfile = Omit<
-    PrismaCandidateProfile,
-    "userId" | "user" | "skills" | "experiences" | "reviews" // 'reviews' renommé en 'reviewsCount'
-  > & {
-    // id est déjà string
-    skills: AppSkill[]
-    experiences: AppExperience[]
-    reviewsCount: number // S'assurer que cela correspond au schéma
-  }
-  
-  export type CandidateForCard = Pick<
-    AppCandidateProfile,
-    | "id"
-    | "firstName"
-    | "lastName"
-    | "avatar"
-    | "country"
-    | "city"
-    | "commune"
-    | "experienceLevel" // ou un champ titre/spécialité principal
-    | "rating"
-    | "reviewsCount"
-    | "verified"
-  > & {
-    mainTitle?: string // Pour afficher "Serveuse expérimentée" etc.
-    skillsSummary?: string[] // Top 3 compétences
-  }
-  
-  // --- Employer & Job Types ---
-  export type AppEmployerProfile = Omit<PrismaEmployerProfile, "userId" | "user" | "jobs"> & {
-    // id est déjà string
-    jobs: AppJob[]
-  }
-  
-  export type AppJob = Omit<PrismaJob, "employerProfileId" | "employer"> & {
-    // id est déjà string
-    employer: Pick<AppEmployerProfile, "id" | "companyName" | "companyLogo">
-  }
-  
-  // --- Form Data Types ---
-  export interface ContactFormData {
-    name: string
-    email: string
-    message: string
-    subject?: string
-  }
-  
-  // Type pour les données du formulaire d'inscription (peut être divisé davantage)
-  export type RegistrationFormData = Partial<
-    Pick<
-      PrismaUser,
-      "email" | "phone" | "role"
-      // hashedPassword sera géré côté serveur
-    > &
-      Pick<
-        PrismaCandidateProfile,
-        | "firstName"
-        | "lastName"
-        | "dateOfBirth"
-        | "gender"
-        | "experienceLevel"
-        | "educationLevel"
-        | "availability"
-        | "salaryExpectation"
-        | "workAuthorization"
-        | "avatar"
-        | "country"
-        | "city"
-        | "commune"
-        | "bio"
-        // skills et languages seront des string[]
-      > & { skills?: string[]; languages?: string[] } & Pick<
-        // Pour le formulaire
-        PrismaEmployerProfile,
-        | "companyName"
-        | "companyType"
-        | "companySize"
-        | "foundingYear" // Sera string dans le form, converti en Int
-        | "companyDescription"
-        | "contactPerson"
-        | "website"
-        // socialMediaLinks sera un objet ou string JSON
-        | "companyAddress"
-        | "companyLogo"
-        // country, city, commune sont déjà dans Candidate
-      > & { socialMediaLinks?: string } // Pour le formulaire
-  > & { password?: string } // Ajouter le mot de passe pour le formulaire
-  
+  User as PrismaUser,
+  CandidateProfile as PrismaCandidateProfile,
+  EmployerProfile as PrismaEmployerProfile,
+  Job as PrismaJob,
+  Skill as PrismaSkill,
+  Experience as PrismaExperience,
+  Education as PrismaEducation,
+  Certification as PrismaCertification,
+  Role as PrismaRole,
+  GenderEnum as PrismaGenderEnum,
+  ExperienceLevelEnum as PrismaExperienceLevelEnum,
+  EducationLevelEnum as PrismaEducationLevelEnum,
+  AvailabilityEnum as PrismaAvailabilityEnum,
+  SkillCategoryEnum as PrismaSkillCategoryEnum,
+  JobTypeEnum as PrismaJobTypeEnum,
+  JobStatusEnum as PrismaJobStatusEnum,
+} from "@prisma/client"
+
+// --- Enums ---
+export type Role = PrismaRole
+export type Gender = PrismaGenderEnum
+export type ExperienceLevel = PrismaExperienceLevelEnum
+export type EducationLevel = PrismaEducationLevelEnum
+export type Availability = PrismaAvailabilityEnum
+export type SkillCategory = PrismaSkillCategoryEnum
+export type JobType = PrismaJobTypeEnum
+export type JobStatus = PrismaJobStatusEnum
+
+// Mappage pour les labels des catégories de compétences (pour l'affichage UI)
+export const SKILL_CATEGORY_LABELS: Record<SkillCategory, string> = {
+  TECHNICAL: "Technique",
+  SOFT_SKILL: "Compétence Douce",
+  LANGUAGE: "Langue",
+  MANAGEMENT: "Management",
+  DESIGN: "Design",
+  MARKETING: "Marketing",
+  SALES: "Vente",
+  OTHER: "Autre",
+}
+
+// --- User & Auth Types ---
+export type AppUser = Omit<PrismaUser, "hashedPassword" | "accounts" | "sessions" | "emailVerified"> & {
+  candidateProfile?: AppCandidateProfile | null
+  employerProfile?: AppEmployerProfile | null
+  emailVerified?: string | null
+}
+
+// --- Candidate Types ---
+export type AppSkill = Omit<PrismaSkill, "candidateProfileId"> & {
+  category?: SkillCategory // Utilise la nouvelle énumération
+}
+
+export type AppExperience = Omit<PrismaExperience, "candidateProfileId"> & {
+  periodStart: string
+  periodEnd?: string | null
+}
+
+export type AppEducation = Omit<PrismaEducation, "candidateProfileId"> & {
+  // year est déjà un nombre
+}
+
+export type AppCertification = Omit<PrismaCertification, "candidateProfileId"> & {
+  date: string // Convertir DateTime en string pour le client
+}
+
+export type AppCandidateProfile = Omit<
+  PrismaCandidateProfile,
+  | "userId"
+  | "user"
+  | "skills"
+  | "experiences"
+  | "education"
+  | "certifications"
+  | "reviews"
+  | "gender"
+  | "experienceLevel"
+  | "educationLevel"
+  | "availability"
+> & {
+  skills: AppSkill[]
+  experiences: AppExperience[]
+  education: AppEducation[]
+  certifications: AppCertification[]
+  reviewsCount: number
+  gender?: Gender
+  experienceLevel?: ExperienceLevel
+  educationLevel?: EducationLevel
+  availability?: Availability
+}
+
+export type CandidateForCard = Pick<
+  AppCandidateProfile,
+  | "id"
+  | "firstName"
+  | "lastName"
+  | "avatar"
+  | "country"
+  | "city"
+  | "commune"
+  | "experienceLevel"
+  | "rating"
+  | "reviewsCount"
+  | "verified"
+> & {
+  mainTitle?: string
+  skillsSummary?: string[]
+}
+
+// --- Employer & Job Types ---
+export type AppEmployerProfile = Omit<PrismaEmployerProfile, "userId" | "user" | "jobs"> & {
+  jobs: AppJob[]
+}
+
+export type AppJob = Omit<PrismaJob, "employerProfileId" | "employer" | "jobType" | "status"> & {
+  employer: Pick<AppEmployerProfile, "id" | "companyName" | "companyLogo">
+  jobType: JobType
+  status: JobStatus
+}
+
+// --- Form Data Types ---
+export interface ContactFormData {
+  name: string
+  email: string
+  message: string
+  subject?: string
+}
+
+export type RegistrationFormData = Partial<
+  Pick<PrismaUser, "email" | "phone"> & { password?: string; role?: "candidate" | "employer" } & Pick<
+      PrismaCandidateProfile,
+      "firstName" | "lastName" | "dateOfBirth" | "avatar" | "country" | "city" | "commune" | "bio" | "languages"
+    > & {
+      gender?: string
+      experienceLevel?: string
+      educationLevel?: string
+      availability?: string
+      skills?: string[]
+    } & Pick<
+      PrismaEmployerProfile,
+      | "companyName"
+      | "companyType"
+      | "companySize"
+      | "foundingYear"
+      | "companyDescription"
+      | "contactPerson"
+      | "website"
+      | "companyAddress"
+      | "companyLogo"
+    > & { socialMediaLinks?: string }
+>

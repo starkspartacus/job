@@ -4,19 +4,17 @@ import { useTransition, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Edit, Trash2, Plus } from "lucide-react"
-// Assurez-vous que cette action existe et est correctement typée
 import { deleteCandidateSkill, saveCandidateSkill } from "@/app/actions/candidates"
 import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
-import { SkillForm } from "./SkillForm" // Assurez-vous que ce composant existe
+import { SkillForm } from "./SkillForm"
 import { Progress } from "@/components/ui/progress"
-import type { AppSkill } from "@/lib/types" // Utiliser le type centralisé
+import { type AppSkill, SKILL_CATEGORY_LABELS } from "@/lib/types" // Importez SKILL_CATEGORY_LABELS
 
-// Le type Skill est maintenant AppSkill importé
 type Props = {
   skills: AppSkill[]
-  candidateProfileId: string // Nécessaire pour sauvegarder/lier la compétence
-  refreshSkills: () => void // Renommé pour clarté
+  candidateProfileId: string
+  refreshSkills: () => void
 }
 
 export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) {
@@ -26,7 +24,8 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
   const [editingSkill, setEditingSkill] = useState<AppSkill | undefined>()
 
   const groupedSkills = skills.reduce<Record<string, AppSkill[]>>((acc, skill) => {
-    const category = skill.category || "Autres Compétences"
+    // Utiliser le mappage pour obtenir le label de la catégorie
+    const category = skill.category ? SKILL_CATEGORY_LABELS[skill.category] : "Autres Compétences"
     if (!acc[category]) {
       acc[category] = []
     }
@@ -38,7 +37,7 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
     setDeletingId(id)
     startTransition(async () => {
       try {
-        await deleteCandidateSkill(id) // L'action doit gérer la suppression en base
+        await deleteCandidateSkill(id)
         toast.success("Compétence supprimée")
         refreshSkills()
       } catch (error) {
@@ -60,20 +59,17 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
     setIsFormOpen(true)
   }
 
-  const handleSubmit = async (data: Omit<AppSkill, "id">) => {
-    // data ici devrait être { name: string, level: number, category?: string }
+  const handleSubmit = async (data: Omit<AppSkill, "id">, id?: string) => {
     startTransition(async () => {
       try {
-        await saveCandidateSkill(data, candidateProfileId, editingSkill?.id)
+        await saveCandidateSkill(data, candidateProfileId, id)
         setIsFormOpen(false)
-        toast.success(editingSkill ? "Compétence modifiée" : "Compétence ajoutée")
+        toast.success(id ? "Compétence modifiée" : "Compétence ajoutée")
         refreshSkills()
         setEditingSkill(undefined)
       } catch (error) {
         console.error(error)
-        toast.error(
-          editingSkill ? "Erreur lors de la modification de la compétence" : "Erreur lors de l'ajout de la compétence",
-        )
+        toast.error(id ? "Erreur lors de la modification de la compétence" : "Erreur lors de l'ajout de la compétence")
       }
     })
   }
@@ -89,7 +85,7 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
     <div className="space-y-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-semibold text-gray-800">Compétences</h3>
-        <Button size="sm" variant="outline" onClick={handleAdd} className="bg-white">
+        <Button size="sm" variant="outline" onClick={handleAdd} className="bg-white text-gray-700 border-gray-200">
           <Plus className="w-4 h-4 mr-2" /> Ajouter une compétence
         </Button>
       </div>
@@ -110,7 +106,7 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
                 {categorySkills.map((skill) => (
                   <motion.div
                     key={skill.id}
-                    layout // Pour une animation fluide lors de la suppression/réorganisation
+                    layout
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
@@ -146,7 +142,7 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
                           </Button>
                         </div>
                       </div>
-                      <Progress value={skill.level} className="h-2" />
+                      <Progress value={skill.level} className="h-2 bg-gray-200 [&>*]:bg-blue-500" />
                     </Card>
                   </motion.div>
                 ))}
@@ -158,13 +154,8 @@ export function SkillList({ skills, candidateProfileId, refreshSkills }: Props) 
         )}
       </AnimatePresence>
 
-      {isFormOpen /* Condition pour s'assurer que SkillForm est monté seulement si nécessaire */ && (
-        <SkillForm
-          open={isFormOpen}
-          onOpenChange={setIsFormOpen}
-          skillToEdit={editingSkill} // Renommé pour clarté
-          onSubmit={handleSubmit}
-        />
+      {isFormOpen && (
+        <SkillForm open={isFormOpen} onOpenChange={setIsFormOpen} skillToEdit={editingSkill} onSubmit={handleSubmit} />
       )}
     </div>
   )

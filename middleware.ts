@@ -17,8 +17,11 @@ export async function middleware(req: NextRequest) {
   const isAuth = !!token
   const { pathname } = req.nextUrl
 
+  console.log(`[DEBUG MIDDLEWARE] Path: ${pathname}, Authenticated: ${isAuth}`)
+
   // Exclure les routes API générales (sauf /api/auth) du traitement du middleware
   if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth")) {
+    console.log("[DEBUG MIDDLEWARE] API route, skipping.")
     return NextResponse.next()
   }
 
@@ -26,12 +29,14 @@ export async function middleware(req: NextRequest) {
 
   // Si l'utilisateur est sur une page d'authentification et est déjà authentifié
   if (isAuthPage && isAuth) {
+    console.log("[DEBUG MIDDLEWARE] Authenticated user on auth page, redirecting to /")
     return NextResponse.redirect(new URL("/", req.url))
   }
 
   // Pages protégées nécessitant une authentification
   const protectedPaths = ["/espace-candidat", "/espace-recruteur"]
   if (protectedPaths.some((p) => pathname.startsWith(p)) && !isAuth) {
+    console.log("[DEBUG MIDDLEWARE] Unauthenticated user on protected page, redirecting to /connexion")
     const callbackUrl = cleanUrlPath(req.url)
     const redirectUrl = new URL("/connexion", req.url)
     // Éviter d'ajouter callbackUrl si c'est déjà une page d'auth ou la racine (pour éviter des boucles ou redirections inutiles)
@@ -41,6 +46,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
+  console.log("[DEBUG MIDDLEWARE] Allowing access.")
   return NextResponse.next()
 }
 

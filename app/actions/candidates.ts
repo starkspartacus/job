@@ -2,43 +2,34 @@
 
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/app/api/auth/[...nextauth]/route" // Ajustez le chemin si nécessaire
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { revalidatePath } from "next/cache"
-import type { AppSkill, AppExperience, AppCandidateProfile } from "@/lib/types"
+import type { AppSkill, AppExperience, AppCandidateProfile, AppEducation, AppCertification } from "@/lib/types"
 
 // --- Skills Actions ---
 
 export async function saveCandidateSkill(
-  skillData: Omit<AppSkill, "id">, // name, level, category?
+  skillData: Omit<AppSkill, "id">,
   candidateProfileId: string,
-  skillId?: string, // Pour la mise à jour
+  skillId?: string,
 ): Promise<AppSkill> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     throw new Error("Non autorisé : Utilisateur non connecté")
   }
 
-  // Optionnel : Vérifier si le candidateProfileId appartient bien à l'utilisateur connecté
-  // const profile = await prisma.candidateProfile.findUnique({ where: { id: candidateProfileId } });
-  // if (!profile || profile.userId !== session.user.id) {
-  //   throw new Error("Non autorisé : Profil candidat non valide");
-  // }
-
   if (skillId) {
-    // Mise à jour
     const updatedSkill = await prisma.skill.update({
-      where: { id: skillId /*, candidateProfileId: candidateProfileId */ }, // Sécurité supplémentaire
+      where: { id: skillId },
       data: {
         name: skillData.name,
         level: skillData.level,
         category: skillData.category,
-        // candidateProfileId n'est pas mis à jour ici
       },
     })
-    revalidatePath("/espace-candidat") // ou le chemin spécifique du profil
-    return updatedSkill as AppSkill // Cast si nécessaire, Prisma retourne le type Prisma
+    revalidatePath("/espace-candidat")
+    return updatedSkill as AppSkill
   } else {
-    // Création
     const newSkill = await prisma.skill.create({
       data: {
         name: skillData.name,
@@ -57,11 +48,8 @@ export async function deleteCandidateSkill(skillId: string): Promise<void> {
   if (!session?.user?.id) {
     throw new Error("Non autorisé")
   }
-
-  // Optionnel : Vérifier que la compétence appartient bien au profil du candidat connecté
-  // avant de supprimer.
   await prisma.skill.delete({
-    where: { id: skillId /*, candidateProfile: { userId: session.user.id } */ },
+    where: { id: skillId },
   })
   revalidatePath("/espace-candidat")
 }
@@ -69,7 +57,7 @@ export async function deleteCandidateSkill(skillId: string): Promise<void> {
 // --- Experiences Actions ---
 
 export async function saveCandidateExperience(
-  experienceData: Omit<AppExperience, "id">, // title, company, periodStart, periodEnd?, isCurrent?, description?, achievements?
+  experienceData: Omit<AppExperience, "id">,
   candidateProfileId: string,
   experienceId?: string,
 ): Promise<AppExperience> {
@@ -82,7 +70,7 @@ export async function saveCandidateExperience(
     title: experienceData.title,
     company: experienceData.company,
     location: experienceData.location,
-    periodStart: new Date(experienceData.periodStart), // Convertir string en Date
+    periodStart: new Date(experienceData.periodStart),
     periodEnd: experienceData.periodEnd ? new Date(experienceData.periodEnd) : null,
     isCurrent: experienceData.isCurrent || false,
     description: experienceData.description,
@@ -96,15 +84,23 @@ export async function saveCandidateExperience(
       data: dataToSave,
     })
     revalidatePath("/espace-candidat")
-    // @ts-ignore TODO: Fix type mapping for dates if necessary client-side
-    return updatedExperience as AppExperience
+    // Conversion explicite des dates pour correspondre à AppExperience
+    return {
+      ...updatedExperience,
+      periodStart: updatedExperience.periodStart.toISOString().split("T")[0],
+      periodEnd: updatedExperience.periodEnd ? updatedExperience.periodEnd.toISOString().split("T")[0] : null,
+    } as AppExperience
   } else {
     const newExperience = await prisma.experience.create({
       data: dataToSave,
     })
     revalidatePath("/espace-candidat")
-    // @ts-ignore
-    return newExperience as AppExperience
+    // Conversion explicite des dates pour correspondre à AppExperience
+    return {
+      ...newExperience,
+      periodStart: newExperience.periodStart.toISOString().split("T")[0],
+      periodEnd: newExperience.periodEnd ? newExperience.periodEnd.toISOString().split("T")[0] : null,
+    } as AppExperience
   }
 }
 
@@ -119,7 +115,108 @@ export async function deleteCandidateExperience(experienceId: string): Promise<v
   revalidatePath("/espace-candidat")
 }
 
-// Action pour récupérer le profil complet du candidat (incluant skills et experiences)
+// --- Education Actions ---
+export async function saveCandidateEducation(
+  educationData: Omit<AppEducation, "id">,
+  candidateProfileId: string,
+  educationId?: string,
+): Promise<AppEducation> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    throw new Error("Non autorisé")
+  }
+
+  const dataToSave = {
+    degree: educationData.degree,
+    school: educationData.school,
+    location: educationData.location,
+    year: educationData.year,
+    mention: educationData.mention,
+    candidateProfileId: candidateProfileId,
+  }
+
+  if (educationId) {
+    const updatedEducation = await prisma.education.update({
+      where: { id: educationId },
+      data: dataToSave,
+    })
+    revalidatePath("/espace-candidat")
+    return updatedEducation as AppEducation
+  } else {
+    const newEducation = await prisma.education.create({
+      data: dataToSave,
+    })
+    revalidatePath("/espace-candidat")
+    return newEducation as AppEducation
+  }
+}
+
+export async function deleteCandidateEducation(educationId: string): Promise<void> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    throw new Error("Non autorisé")
+  }
+  await prisma.education.delete({
+    where: { id: educationId },
+  })
+  revalidatePath("/espace-candidat")
+}
+
+// --- Certification Actions ---
+export async function saveCandidateCertification(
+  certificationData: Omit<AppCertification, "id">,
+  candidateProfileId: string,
+  certificationId?: string,
+): Promise<AppCertification> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    throw new Error("Non autorisé")
+  }
+
+  const dataToSave = {
+    name: certificationData.name,
+    issuer: certificationData.issuer,
+    date: new Date(certificationData.date),
+    verified: certificationData.verified || false,
+    candidateProfileId: candidateProfileId,
+  }
+
+  if (certificationId) {
+    const updatedCertification = await prisma.certification.update({
+      where: { id: certificationId },
+      data: dataToSave,
+    })
+    revalidatePath("/espace-candidat")
+    // Conversion explicite de la date pour correspondre à AppCertification
+    return {
+      ...updatedCertification,
+      date: updatedCertification.date.toISOString().split("T")[0],
+    } as AppCertification
+  } else {
+    const newCertification = await prisma.certification.create({
+      data: dataToSave,
+    })
+    revalidatePath("/espace-candidat")
+    // Conversion explicite de la date pour correspondre à AppCertification
+    return {
+      ...newCertification,
+      date: newCertification.date.toISOString().split("T")[0],
+    } as AppCertification
+  }
+}
+
+export async function deleteCandidateCertification(certificationId: string): Promise<void> {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    throw new Error("Non autorisé")
+  }
+  await prisma.certification.delete({
+    where: { id: certificationId },
+  })
+  revalidatePath("/espace-candidat")
+}
+
+// --- Get Candidate Profile with Details ---
 export async function getCandidateProfileWithDetails(): Promise<AppCandidateProfile | null> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -133,10 +230,19 @@ export async function getCandidateProfileWithDetails(): Promise<AppCandidateProf
       skills: true,
       experiences: {
         orderBy: {
-          periodStart: "desc", // Ordonner les expériences
+          periodStart: "desc",
         },
       },
-      // user: true, // Si vous avez besoin des infos de base de l'utilisateur
+      education: {
+        orderBy: {
+          year: "desc",
+        },
+      },
+      certifications: {
+        orderBy: {
+          date: "desc",
+        },
+      },
     },
   })
 
@@ -145,17 +251,27 @@ export async function getCandidateProfileWithDetails(): Promise<AppCandidateProf
     return null
   }
 
-  // Mapper les dates d'expérience en string pour le client si AppExperience les attend en string
   const mappedExperiences = candidateProfile.experiences.map((exp) => ({
     ...exp,
-    periodStart: exp.periodStart.toISOString().split("T")[0], // YYYY-MM-DD
+    periodStart: exp.periodStart.toISOString().split("T")[0],
     periodEnd: exp.periodEnd ? exp.periodEnd.toISOString().split("T")[0] : null,
+  }))
+
+  const mappedCertifications = candidateProfile.certifications.map((cert) => ({
+    ...cert,
+    date: cert.date.toISOString().split("T")[0],
   }))
 
   return {
     ...candidateProfile,
-    reviewsCount: candidateProfile.reviewsCount, // S'assurer que le nom correspond
-    skills: candidateProfile.skills as AppSkill[], // Cast si les types Prisma et App sont compatibles
+    reviewsCount: candidateProfile.reviewsCount,
+    skills: candidateProfile.skills as AppSkill[],
     experiences: mappedExperiences as AppExperience[],
-  } as AppCandidateProfile // Cast final pour s'assurer que le type de retour est correct
+    education: candidateProfile.education as AppEducation[],
+    certifications: mappedCertifications as AppCertification[],
+  } as AppCandidateProfile
+}
+
+export async function refreshCandidateDataAction() {
+  revalidatePath("/espace-candidat")
 }

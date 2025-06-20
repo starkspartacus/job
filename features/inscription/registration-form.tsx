@@ -14,17 +14,17 @@ import { CandidateProfileStep } from "@/components/inscription/candidate-profile
 import { EmployerProfileStep } from "@/components/inscription/employer-profile-step"
 import { ConfirmationStep } from "@/components/inscription/confirmation-step"
 import { ProgressHeader } from "@/components/inscription/progress-header"
-import type { UserFormData } from "@/features/inscription/types" // Import the shared type
+import type { UserFormData } from "./types" // Import the shared type
 
 export function RegistrationForm() {
   const router = useRouter()
   const [step, setStep] = useState(1)
-  const [userType, setUserType] = useState<"candidate" | "employer">("candidate")
+  const [userType, setUserType] = useState<"CANDIDATE" | "EMPLOYER">("CANDIDATE")
   const [formData, setFormData] = useState<UserFormData>({
     email: "",
     password: "",
     phone: "",
-    role: "candidate",
+    role: "CANDIDATE",
     firstName: "",
     lastName: "",
     dateOfBirth: "",
@@ -44,7 +44,6 @@ export function RegistrationForm() {
     companyDescription: "",
     contactPerson: "",
     website: "",
-    socialMedia: "",
     companyAddress: "",
     country: "",
     city: "",
@@ -55,8 +54,8 @@ export function RegistrationForm() {
   const [loading, setLoading] = useState(false)
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    setErrors((prev) => ({ ...prev, [field]: "" }))
+    setFormData((prev) => ({ ...prev, [field as keyof UserFormData]: value }))
+    setErrors((prev) => ({ ...prev, [field as keyof UserFormData]: "" }))
   }
 
   const handleLocationChange = (locationData: { country: string; city: string; commune: string }) => {
@@ -91,6 +90,12 @@ export function RegistrationForm() {
     })
   }
 
+  const handleUserTypeChange = (type: "candidate" | "employer") => {
+    const upperType = type.toUpperCase() as "CANDIDATE" | "EMPLOYER"
+    setUserType(upperType)
+    setFormData((prev) => ({ ...prev, role: upperType }))
+  }
+
   const validateStep = () => {
     const currentErrors: Record<string, string> = {}
     if (step === 1) {
@@ -99,7 +104,7 @@ export function RegistrationForm() {
       if (!formData.phone) currentErrors.phone = "Le numéro de téléphone est requis."
       if (!formData.role) currentErrors.role = "Le type d'utilisateur est requis."
     } else if (step === 2) {
-      if (userType === "candidate") {
+      if (userType === "CANDIDATE") {
         if (!formData.firstName) currentErrors.firstName = "Le prénom est requis."
         if (!formData.lastName) currentErrors.lastName = "Le nom est requis."
         if (!formData.dateOfBirth) currentErrors.dateOfBirth = "La date de naissance est requise."
@@ -159,7 +164,10 @@ export function RegistrationForm() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          role: userType.toUpperCase(),
+        }),
       })
 
       const data = await response.json()
@@ -200,25 +208,28 @@ export function RegistrationForm() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {step === 1 && (
               <AccountStep
-                formData={formData}
+                formData={{
+                  ...formData,
+                  role: formData.role?.toLowerCase() as "candidate" | "employer",
+                }}
                 errors={errors}
                 handleInputChange={handleInputChange}
-                setUserType={setUserType}
-                userType={userType}
+                setUserType={handleUserTypeChange}
+                userType={userType.toLowerCase() as "candidate" | "employer"}
               />
             )}
 
             {step === 2 && (
-              <Tabs defaultValue={userType}>
+              <Tabs defaultValue={userType} onValueChange={(value) => setUserType(value as "CANDIDATE" | "EMPLOYER")}>
                 <TabsList>
-                  <Button variant="outline" size="sm" onClick={() => setUserType("candidate")}>
+                  <Button variant="outline" size="sm" onClick={() => setUserType("CANDIDATE")}>
                     Candidate
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setUserType("employer")}>
+                  <Button variant="outline" size="sm" onClick={() => setUserType("EMPLOYER")}>
                     Employer
                   </Button>
                 </TabsList>
-                <TabsContent value="candidate" className={userType === "candidate" ? "block" : "hidden"}>
+                <TabsContent value="CANDIDATE" className={userType === "CANDIDATE" ? "block" : "hidden"}>
                   <CandidateProfileStep
                     formData={formData}
                     errors={errors}
@@ -227,7 +238,7 @@ export function RegistrationForm() {
                     handleLanguagesChange={handleLanguagesChange}
                   />
                 </TabsContent>
-                <TabsContent value="employer" className={userType === "employer" ? "block" : "hidden"}>
+                <TabsContent value="EMPLOYER" className={userType === "EMPLOYER" ? "block" : "hidden"}>
                   <EmployerProfileStep
                     formData={formData}
                     errors={errors}
@@ -238,7 +249,15 @@ export function RegistrationForm() {
               </Tabs>
             )}
 
-            {step === 3 && <ConfirmationStep formData={formData} userType={userType} />}
+            {step === 3 && (
+              <ConfirmationStep
+                formData={{
+                  ...formData,
+                  role: formData.role?.toLowerCase() as "candidate" | "employer",
+                }}
+                userType={userType.toLowerCase() as "candidate" | "employer"}
+              />
+            )}
 
             <div className="flex justify-between mt-6">
               {step > 1 && (

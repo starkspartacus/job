@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
-import prisma from "@/lib/prisma" // Assurez-vous que ce chemin est correct
+import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
+import { Role } from "@prisma/client" // Importez l'enum Role de Prisma
 
 export async function POST(request: Request) {
   try {
@@ -8,7 +9,7 @@ export async function POST(request: Request) {
       email,
       phone,
       password,
-      role,
+      role: rawRole, // Renommez la variable pour éviter la confusion
       // Candidate specific fields
       firstName,
       lastName,
@@ -35,11 +36,19 @@ export async function POST(request: Request) {
       country,
       city,
       commune,
-      companyLogo, // This field is correctly extracted here
+      companyLogo,
     } = await request.json()
 
-    if (!email || !password || !role) {
+    if (!email || !password || !rawRole) {
       return NextResponse.json({ success: false, message: "Email, mot de passe et rôle sont requis." }, { status: 400 })
+    }
+
+    // Convertir le rôle en majuscules pour correspondre à l'énumération Prisma
+    const role = rawRole.toUpperCase() as Role // Cast pour s'assurer que TypeScript le reconnaît comme un type Role valide
+
+    // Vérifier si le rôle est valide selon l'énumération Prisma
+    if (!Object.values(Role).includes(role)) {
+      return NextResponse.json({ success: false, message: "Rôle utilisateur invalide." }, { status: 400 })
     }
 
     // Check if user already exists by email or phone
@@ -61,12 +70,13 @@ export async function POST(request: Request) {
         email,
         phone,
         hashedPassword,
-        role,
+        role, // Utiliser la valeur convertie en majuscules
       },
     })
 
     // Create associated profile based on role
-    if (role === "candidate") {
+    if (role === Role.CANDIDATE) {
+      // Utiliser Role.CANDIDATE de l'enum
       await prisma.candidateProfile.create({
         data: {
           userId: newUser.id,
@@ -76,15 +86,28 @@ export async function POST(request: Request) {
           gender: gender || "",
           experienceLevel: experienceLevel || "",
           educationLevel: educationLevel || "",
-          skills: skills || [],
-          languages: languages || [],
+          skills: {
+            create: [
+              ...(skills || []).map((name: string) => ({
+                name,
+                category: "Compétence",
+                level: 0,
+              })),
+              ...(languages || []).map((name: string) => ({
+                name,
+                category: "Langue parlée",
+                level: 0,
+              })),
+            ],
+          },
           availability: availability || "",
           salaryExpectation: salaryExpectation || "",
           workAuthorization: workAuthorization ?? false,
           avatar: avatar || "",
         },
       })
-    } else if (role === "employer") {
+    } else if (role === Role.EMPLOYER) {
+      // Utiliser Role.EMPLOYER de l'enum
       await prisma.employerProfile.create({
         data: {
           userId: newUser.id,
@@ -95,12 +118,12 @@ export async function POST(request: Request) {
           companyDescription: companyDescription || "",
           contactPerson: contactPerson || "",
           website: website || "",
-          socialMedia: socialMedia || "",
+          socialMediaLinks: socialMedia || {}, // Assurez-vous que socialMedia est un objet JSON valide
           companyAddress: companyAddress || "",
           country: country || "",
           city: city || "",
           commune: commune || "",
-          companyLogo: companyLogo || "", // This will now be recognized
+          companyLogo: companyLogo || "",
         },
       })
     }
